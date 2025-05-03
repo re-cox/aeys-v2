@@ -1,0 +1,17 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Hata Çözümü
+- Kullanıcının geçmiş hatalarını ve çözümlerini saklamak için `knowledge-base.md` dosyasını kullan.
+- Bir hata tespit edildiğinde önce `knowledge-base.md` dosyasına bak. dosya yolu :"D:\Belgeler\aeys-v2\knowledge-base.md"
+- Eğer hata için bir kayıt varsa, doğrudan önerilen çözümü kullan.
+- Eğer hata yeni bir hata ise, çözüme ulaştığında bunu `knowledge-base.md` dosyasına kaydet.
+- Kayıt formatı şu şekilde olmalı:
+
+## [Hata Mesajı]
+
+Çözüm: [Çözüm Açıklaması]
+- Kullanıcı aynı hatayı tekrar sorarsa, önce bu dosyayı kontrol et ve eğer çözüm varsa doğrudan yanıt ver.
+- Eğer dosyada kayıtlı değilse, en iyi çözümü üret ve yeni bir kayıt oluştur.

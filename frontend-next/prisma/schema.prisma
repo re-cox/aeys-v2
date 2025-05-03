@@ -1,0 +1,432 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "windows"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Department {
+  id               String       @id @default(cuid())
+  name             String
+  description      String?
+  parentId         String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+  Department       Department?  @relation("DepartmentToDepartment", fields: [parentId], references: [id])
+  other_Department Department[] @relation("DepartmentToDepartment")
+  Project          Project[]
+  User             User[]
+}
+
+model AnnualLeave {
+  id                                  String      @id @default(cuid())
+  userId                              String
+  startDate                           DateTime    @db.Date
+  endDate                             DateTime    @db.Date
+  status                              LeaveStatus @default(PENDING)
+  reason                              String?
+  requestedAt                         DateTime    @default(now())
+  approvedById                        String?
+  approvedAt                          DateTime?
+  User_AnnualLeave_approvedByIdToUser User?       @relation("AnnualLeave_approvedByIdToUser", fields: [approvedById], references: [id])
+  User_AnnualLeave_userIdToUser       User        @relation("AnnualLeave_userIdToUser", fields: [userId], references: [id])
+}
+
+model Attendance {
+  id            String   @id @default(uuid())
+  userId        String
+  isHoliday     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  date          DateTime @db.Date
+  hasOvertime   Boolean? @default(false)
+  notes         String?
+  overtimeEnd   String?
+  overtimeStart String?
+  status        String
+  User          User     @relation(fields: [userId], references: [id])
+}
+
+model Task {
+  id                          String     @id @default(uuid())
+  title                       String
+  description                 String?
+  status                      TaskStatus
+  priority                    Priority
+  startDate                   DateTime?
+  dueDate                     DateTime?
+  completedDate               DateTime?
+  estimatedHours              Float?
+  actualHours                 Float?
+  projectId                   String
+  createdById                 String
+  parentTaskId                String?
+  createdAt                   DateTime   @default(now())
+  updatedAt                   DateTime   @updatedAt
+  User_Task_createdByIdToUser User       @relation("Task_createdByIdToUser", fields: [createdById], references: [id])
+  Task                        Task?      @relation("TaskToTask", fields: [parentTaskId], references: [id])
+  other_Task                  Task[]     @relation("TaskToTask")
+  project                     Project    @relation(fields: [projectId], references: [id])
+  User_TaskAssignee           User[]     @relation("TaskAssignee")
+}
+
+model Customer {
+  id        String         @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  address   String?
+  taxId     String?
+  status    CustomerStatus @default(ACTIVE)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  Contact   Contact[]
+  Document  Document[]
+  Project   Project[]
+  proposals Proposal[]
+}
+
+model Document {
+  id           String    @id @default(cuid())
+  title        String
+  description  String?
+  fileUrl      String
+  fileType     String
+  fileSize     Int
+  version      Int       @default(1)
+  projectId    String?
+  customerId   String?
+  uploadedById String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  Customer     Customer? @relation(fields: [customerId], references: [id])
+  Project      Project?  @relation(fields: [projectId], references: [id])
+  uploadedBy   User      @relation("UploadedByRelation", fields: [uploadedById], references: [id])
+}
+
+model Assignment {
+  id          String    @id @default(uuid())
+  inventoryId String
+  assignedTo  String
+  quantity    Int
+  assignDate  DateTime
+  returnDate  DateTime?
+  isReturned  Boolean   @default(false)
+  note        String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  Inventory   Inventory @relation(fields: [inventoryId], references: [id])
+}
+
+model Project {
+  id             String           @id @default(cuid())
+  name           String
+  description    String?
+  status         ProjectStatus
+  startDate      DateTime
+  endDate        DateTime?
+  budget         Float?
+  departmentId   String
+  customerId     String?
+  siteId         String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  Document       Document[]
+  Customer       Customer?        @relation(fields: [customerId], references: [id])
+  Department     Department       @relation(fields: [departmentId], references: [id])
+  Site           Site?            @relation(fields: [siteId], references: [id])
+  tasks          Task[]
+  TeknisyenRapor TeknisyenRapor[]
+}
+
+model TeknisyenDokuman {
+  id          String         @id @default(uuid())
+  dosyaAdi    String
+  dosyaUrl    String
+  dosyaTipu   String
+  dosyaBoyutu Int
+  raporId     String
+  yuklayanId  String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime
+  rapor       TeknisyenRapor @relation(fields: [raporId], references: [id], onDelete: Cascade)
+  User        User           @relation(fields: [yuklayanId], references: [id])
+}
+
+model Contact {
+  id         String   @id
+  name       String
+  position   String?
+  email      String?
+  phone      String?
+  customerId String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime
+  Customer   Customer @relation(fields: [customerId], references: [id])
+}
+
+model Inventory {
+  id         String       @id
+  name       String
+  category   String
+  quantity   Int
+  unitPrice  Float?
+  siteId     String?
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime
+  Assignment Assignment[]
+  Site       Site?        @relation(fields: [siteId], references: [id])
+}
+
+model Role {
+  id          String   @id
+  name        String   @unique
+  description String?
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime
+  User        User[]
+}
+
+model Site {
+  id             String           @id
+  name           String
+  location       String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime
+  Inventory      Inventory[]
+  Project        Project[]
+  TeknisyenRapor TeknisyenRapor[]
+}
+
+model TeknisyenRapor {
+  id          String              @id
+  baslik      String
+  aciklama    String?
+  durum       TeknisyenRaporDurum
+  tarih       DateTime            @default(now())
+  teknisyenId String
+  projeId     String?
+  siteId      String?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime
+  dokumanlar  TeknisyenDokuman[]
+  Project     Project?            @relation(fields: [projeId], references: [id])
+  Site        Site?               @relation(fields: [siteId], references: [id])
+  User        User                @relation(fields: [teknisyenId], references: [id])
+}
+
+model User {
+  id                                         String             @id
+  email                                      String             @unique
+  name                                       String?
+  surname                                    String?
+  passwordHash                               String
+  roleId                                     String
+  departmentId                               String?
+  createdAt                                  DateTime           @default(now())
+  updatedAt                                  DateTime
+  AnnualLeave_AnnualLeave_approvedByIdToUser AnnualLeave[]      @relation("AnnualLeave_approvedByIdToUser")
+  AnnualLeave_AnnualLeave_userIdToUser       AnnualLeave[]      @relation("AnnualLeave_userIdToUser")
+  Attendance                                 Attendance[]
+  uploadedDocs                               Document[]         @relation("UploadedByRelation")
+  Task_Task_createdByIdToUser                Task[]             @relation("Task_createdByIdToUser")
+  TeknisyenDokuman                           TeknisyenDokuman[]
+  TeknisyenRapor                             TeknisyenRapor[]
+  Department                                 Department?        @relation(fields: [departmentId], references: [id])
+  Role                                       Role               @relation(fields: [roleId], references: [id])
+  Task_TaskAssignee                          Task[]             @relation("TaskAssignee")
+  Employee                                   Employee?
+}
+
+model Employee {
+  id                String             @id @default(uuid())
+  userId            String             @unique
+  name              String?
+  surname           String?
+  email             String?
+  phone             String?
+  position          String?
+  dateOfBirth       DateTime?
+  dateOfHire        DateTime?
+  profilePictureUrl String?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  user              User               @relation(fields: [userId], references: [id])
+  documents         EmployeeDocument[]
+}
+
+model EmployeeDocument {
+  id               String   @id
+  employeeId       String
+  documentType     String
+  fileName         String
+  originalFileName String
+  filePath         String
+  fileSize         Float
+  mimeType         String
+  uploadDate       DateTime @default(now())
+  uploadedBy       String
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum ProjectStatus {
+  PLANNING
+  STARTED
+  IN_PROGRESS
+  COMPLETED
+  ON_HOLD
+  CANCELLED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TeknisyenRaporDurum {
+  TASLAK
+  INCELENIYOR
+  ONAYLANDI
+  REDDEDILDI
+}
+
+enum ProposalStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  EXPIRED
+}
+
+enum ProposalItemType {
+  MATERIAL
+  LABOR
+  OVERHEAD
+  PROFIT
+  OVERHEAD_PROFIT
+}
+
+enum Currency {
+  TL
+  USD
+  EUR
+  GBP
+}
+
+enum CustomerStatus {
+  ACTIVE
+  INACTIVE
+  LEAD
+  POTENTIAL
+}
+
+model Proposal {
+  id          String         @id @default(uuid())
+  proposalNo  String         @unique
+  title       String
+  description String?
+  status      ProposalStatus @default(DRAFT)
+  customerId  String
+  createdById String
+  validUntil  DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  items       ProposalItem[]
+  attachments ProposalAttachment[]
+  customer    Customer       @relation(fields: [customerId], references: [id])
+}
+
+model ProposalItem {
+  id          String           @id @default(uuid())
+  proposalId  String
+  description String
+  quantity    Float
+  unitPrice   Float
+  type        ProposalItemType
+  unit        String?           // Birim (adet, saat, gün, vb.)
+  currency    Currency         @default(TL)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  proposal    Proposal         @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+}
+
+model ProposalAttachment {
+  id          String    @id @default(uuid())
+  fileName    String    // Dosya adı
+  fileUrl     String    // Dosya URL'i
+  fileType    String?   // Dosya tipi (MIME)
+  fileSize    Int?      // Dosya boyutu (bytes)
+  uploadedAt  DateTime  @default(now())
+  
+  // İlişki
+  proposalId  String
+  proposal    Proposal  @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+}
+
+// EDAS/BEDAS Bildirimleri için modeller
+model EdasNotification {
+  id              String                 @id @default(uuid())
+  refNo           String                 @unique
+  company         String // "BEDAŞ" veya "AYEDAŞ"
+  projectName     String?
+  applicationType String // "NIHAI_BAGLANTI" veya "SANTIYE"
+  customerName    String
+  city            String?
+  district        String?
+  parcelBlock     String? // Ada
+  parcelNo        String? // Parsel
+  status          String // "PENDING", "APPROVED", "REJECTED"
+  currentStep     String // "PROJE", "BAGLANTI_GORUSU", vs.
+  notes           String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  steps           EdasNotificationStep[]
+}
+
+model EdasNotificationStep {
+  id             String                   @id @default(uuid())
+  notificationId String
+  stepType       String // "PROJE", "BAGLANTI_GORUSU", "DAGITIM_BAGLANTI_ANLASMASI", "TESISIN_TAMAMLANMASI", "FEN_MUAYENE"
+  status         String // "PENDING", "APPROVED", "REJECTED"
+  refNo          String? // Her adımın ayrı referans numarası olabilir
+  startDate      DateTime?
+  completionDate DateTime?
+  notes          String?
+  documents      EdasNotificationDocument[]
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  notification   EdasNotification         @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+}
+
+model EdasNotificationDocument {
+  id         String               @id @default(uuid())
+  stepId     String
+  fileUrl    String
+  fileName   String
+  fileType   String
+  fileSize   Int
+  uploadedAt DateTime             @default(now())
+  step       EdasNotificationStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+}

@@ -1,0 +1,38 @@
+Yeni Bildirim Türü Ekleme Yöntemi:
+Backend'de controller dosyasına yeni bir bildirim yardımcı fonksiyonu ekleyin:
+
+// Örnek: Yeni bir bildirim türü
+export const notifyNewExample = async (
+  exampleId: string,
+  employeeId: string,
+  title: string
+) => {
+  const message = `"${title}" başlıklı yeni bir örnek oluşturuldu.`;
+  const link = `/examples/${exampleId}`;
+  
+  return await createNotificationHelper(
+    employeeId,
+    'NEW_EXAMPLE', // Yeni bildirim türü
+    message,
+    link
+  );
+};
+
+Frontend'de NotificationItem.tsx dosyasındaki getNotificationIcon fonksiyonuna yeni türü ekleyin:
+
+const getNotificationIcon = (type: string) => {
+  switch (type) {
+    // ... mevcut bildirim türleri ...
+    case 'NEW_EXAMPLE':
+      return <FileType className="h-4 w-4 text-indigo-500" />; // Uygun bir icon seçin
+    default:
+      return <Bell className="h-4 w-4 text-gray-500" />;
+  }
+};
+
+İlgili controller'a bu bildirimi çağıracak kodu ekleyin (örneğin, yeni bir örnek oluşturulduğunda):
+
+// Örnek oluşturulduğunda, ilgili kişiye bildirim gönder
+if (newExample && assignedTo) {
+  await notifyNewExample(newExample.id, assignedTo, newExample.title);
+}

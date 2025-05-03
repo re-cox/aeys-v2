@@ -1,0 +1,50 @@
+Aydem Elektrik Yönetim Sistemi (AEYS) Hakkında Genel Bilgiler
+Genel Bakış
+Aydem Elektrik Yönetim Sistemi, bir elektrik şirketinin tüm iş süreçlerini tek bir platformda yönetmesini sağlayan kapsamlı bir kurumsal kaynak planlama (ERP) yazılımıdır. Sistem, Next.js App Router kullanılarak geliştirilmiş modern bir web uygulamasıdır ve şirketin farklı departmanlarındaki iş süreçlerini entegre bir şekilde yönetmek için tasarlanmıştır.
+Temel Özellikleri
+1. İş Yönetimi
+Proje Yönetimi: Şirketin yürüttüğü projelerin takibi ve yönetimi
+Görev Yönetimi: Projeler kapsamındaki görevlerin personellere atanması ve takibi
+İlave İşler: Mevcut projelere ek olarak yapılan işlerin yönetimi
+2. Organizasyon Yönetimi
+Departman Yönetimi: Şirket içi departmanların yapılandırılması
+Personel Yönetimi: Çalışanların bilgilerinin tutulması, T.C. kimlik numarası, profil fotoğrafı vb.
+Puantaj Sistemi: Personel devam takibi ve mesai yönetimi
+Personel Görevleri: Çalışanlara atanan görevlerin takibi
+3. Müşteri İlişkileri Yönetimi
+Müşteri Listesi: Müşteri bilgilerinin yönetimi
+Teklifler: Müşterilere sunulan tekliflerin hazırlanması ve takibi
+Pazarlama: Pazarlama faaliyetlerinin yönetimi
+4. Malzeme Yönetimi
+Stok Yönetimi: Şirketin sahip olduğu malzemelerin stok takibi
+Zimmet Yönetimi: Personele zimmetlenen ekipmanların takibi
+5. Şantiye Yönetimi
+Şantiye Takibi: Aktif şantiyelerin yönetimi
+Şantiye Stok Takibi: Şantiyelerdeki malzeme stoklarının yönetimi
+6. Dokümantasyon
+Evrak Yönetimi: Şirket içi ve dışı evrakların dijital ortamda saklanması
+7. Planlama ve Analiz
+İş Programı: Takvim üzerinde iş planlaması
+Raporlar: Çeşitli iş süreçlerine ait analiz raporları
+Teknik Altyapı
+Frontend: Next.js App Router, React, TypeScript
+UI Bileşenleri: Shadcn UI, Radix UI
+Stillendirme: Tailwind CSS
+Durum Yönetimi: React Hooks (useState, useEffect)
+API İletişimi: Axios
+Bildirimler: Sonner toast bildirimleri
+Tasarım ve Kullanıcı Arayüzü
+Responsive Tasarım: Hem masaüstü hem mobil cihazlarda kullanılabilir
+Tema Desteği: Açık ve koyu tema seçenekleri
+Kolay Navigasyon: Kategorilere ayrılmış yan menü
+Dashboard: Önemli verilerin genel bakışını sunan panel
+Veri Görselleştirme: İstatistikler ve ilerleme durumlarını gösteren grafikler
+Öne Çıkan Özellikler
+Entegre İş Süreçleri: Tüm şirket operasyonlarının tek platformda yönetilmesi
+Personel Takibi: Çalışan bilgileri, görevleri ve performansının izlenmesi
+Müşteri Yönetimi: Müşteri ilişkilerinin ve tekliflerin takibi
+Stok Kontrolü: Malzeme ve ekipmanların takibi
+Şantiye Operasyonları: Saha çalışmalarının izlenmesi
+Dokümantasyon: Belgelerin dijital ortamda saklanması
+Raporlama: İş süreçlerine dair detaylı analiz raporları
+Aydem Elektrik Yönetim Sistemi, elektrik sektöründe faaliyet gösteren bir şirketin tüm iş süreçlerini tek bir platformda birleştirerek verimlilik artışı, işgücü optimizasyonu ve daha iyi kaynak yönetimi sağlayan kapsamlı bir çözümdür

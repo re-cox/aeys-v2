@@ -1,0 +1,25 @@
+- Bu proje kesinlikle mock veri kullanma. Bütün veriler veritabanından çekilecek. En önemli kuralımız.
+
+Projeyi oluştururken MVVM programlama standartını kullan.
+Gerekli klasörleri yarat ve gerekli klasörlerin yaratıldığından emin ol.
+İsteğimi olabildiğince az kod yazarak gerçekleştirmeye çalış.
+Yazılan kodun SOLID prensiplerine uygun olduğundan emin ol.
+Kodun okunabilirliğini artırmak için uygun isimlendirmeler ve yorum satırları ekle.
+Metot ve sınıfların tek bir sorumluluğu olmasına dikkat et.
+İsteğimi tamamlayana kadar durma.
+API isteklerinde gerekli validasyonları yap.
+Hassas verilerin güvenli bir şekilde saklanmasını sağla.
+Güvenlik açıklarına karşı gerekli kontrolleri ekle.
+Memory leak oluşturmayacak şekilde kod yaz. Mevcut kodları Memory leak oluşturmayacak şekilde yeniden düzenle.
+Gereksiz döngü ve işlemleri kaldır.
+Veritabanı sorgularını optimize et.
+Kodun ileride genişletilebilir ve geliştirilebilir olmasına dikkat ederek kod yaz.
+Tekrar eden kodları ortak metodlara al.
+Her önemli metod ve sınıf için Markdown formatında documentation ekle.
+API endpointleri için Markdown documentation oluştur.
+Projenin kurulum ve çalıştırma adımlarını README dosyasında belirt.
+Responsive tasarım prensiplerine uygun kod yaz.
+Uzun işlemlerde iptal seçeneği sun.
+İşlem sonuçlarını toast/snackbar ile bildir.
+Tüm sayfalarda tutarlı font ve spacing kullan.
+İsteğimdeki görselleri internetten kendin bulup ekle.
