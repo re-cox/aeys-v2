@@ -123,4 +123,28 @@ export interface UpdateEmployeePayload {
   emergencyContactPhone?: string;
   emergencyContactRelation?: string;
   profilePictureUrl?: string | null;
-} 
+}
+
+/**
+ * Backend /api/users POST endpoint'inden (createUser)
+ * dönen yanıtın yapısını tanımlar.
+ */
+export type CreateUserResponse = {
+  id: string; // User ID
+  email: string;
+  firstName?: string | null; 
+  lastName?: string | null;
+  role?: { 
+    id: string;
+    name: string; 
+  };
+  employee?: { // Nested employee object
+    id: string; // Employee ID
+    position?: string | null;
+    department?: { 
+      id: string;
+      name: string; 
+    } | null;
+  };
+  createdAt?: string | Date;
+}; 

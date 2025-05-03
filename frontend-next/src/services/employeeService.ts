@@ -1,7 +1,7 @@
 // API istekleri için servis sınıfı
 // import axios from 'axios'; // Kaldırıldı
 import { apiClient, handleApiError } from './api'; // handleApiError eklendi
-import { Employee, EmployeeDocument, NewEmployeePayload, UpdateEmployeePayload } from '@/types/employee';
+import { Employee, EmployeeDocument, NewEmployeePayload, UpdateEmployeePayload, CreateUserResponse } from '@/types/employee';
 import { Role } from '@/types/role'; // Rol tipi import edildi
 // import * as apiService from './api'; // Bu import muhtemelen gereksiz
 
@@ -134,30 +134,21 @@ export async function getEmployeeById(id: string): Promise<BackendEmployeeWithUs
 /**
  * Yeni personel oluşturur (Backend API'sine gönderir)
  * Backend endpoint: POST /api/users
- * Parametre tipi NewEmployeePayload olarak güncellendi
- * Dönen tip BackendEmployeeWithUser olarak güncellendi (Yeni oluşturulan User + Employee)
+ * Parametre tipi NewEmployeePayload
+ * Dönen tip CreateUserResponse olarak güncellendi
  */
 export async function createEmployee(
-  employeeData: NewEmployeePayload // Parametre tipi güncellendi
-): Promise<BackendEmployeeWithUser | null> { // Dönen tip güncellendi
+  employeeData: NewEmployeePayload 
+): Promise<CreateUserResponse | null> { // Dönen tip güncellendi
   const context = "Personel Oluştur";
   console.log("[employeeService] createEmployee çağrıldı, Backend endpoint POST /api/users");
-
-  // Gerekli alan kontrolü NewEmployeePayload'a göre yapılabilir (ama formda yapıldı zaten)
-  // if (!employeeData.email || !employeeData.name || ...) {
-  //     console.error("[employeeService] createEmployee çağrısında eksik alanlar:");
-  //     throw new Error("Personel oluşturmak için gerekli alanlar eksik.");
-  // }
-
-  // Backend'e gönderilecek veri doğrudan employeeData olabilir
-  // Backend API'si tam olarak bu payload'ı beklemeli
   console.log("[employeeService] Personel oluşturma isteği gönderiliyor:", JSON.stringify(employeeData, null, 2));
 
   try {
-    // Backend endpoint'i /users
-    const response = await apiClient.post<BackendEmployeeWithUser>(`/users`, employeeData); // Doğrudan payload gönderildi
+    // Backend endpoint'i /users, dönüş tipi CreateUserResponse
+    const response = await apiClient.post<CreateUserResponse>(`/users`, employeeData); 
     console.log("[employeeService] Personel başarıyla oluşturuldu, Backend yanıtı:", response.data);
-    return response.data; // Başarılı durumda BackendEmployeeWithUser dön
+    return response.data; 
   } catch (error) {
     console.error('[employeeService] Personel oluşturulurken hata oluştu:', error);
     handleApiError(error, context);
@@ -168,16 +159,14 @@ export async function createEmployee(
 /**
  * Personel bilgilerini günceller (Backend API'sine gönderir)
  * Backend endpoint: PUT /api/users/:id
- * Parametre tipi UpdateEmployeePayload olarak güncellendi
- * Dönen tip BackendEmployeeWithUser olarak güncellendi
+ * Dönen tip BackendEmployeeWithUser (güncelleme sonrası tam veri döner varsayımı)
  */
-export async function updateEmployee(id: string, employeeData: UpdateEmployeePayload): Promise<BackendEmployeeWithUser | null> { // Parametre ve dönüş tipi güncellendi
+export async function updateEmployee(id: string, employeeData: UpdateEmployeePayload): Promise<BackendEmployeeWithUser | null> { 
   const context = `Personel Güncelle (ID: ${id})`;
   console.log(`[employeeService] updateEmployee çağrıldı (ID: ${id}) - Backend endpoint PUT /api/users/${id}`);
-  
   console.log("[employeeService] Personel güncelleme isteği gönderiliyor:", JSON.stringify(employeeData, null, 2));
   try {
-    const response = await apiClient.put<BackendEmployeeWithUser>(`/users/${id}`, employeeData); // Doğrudan payload gönderildi
+    const response = await apiClient.put<BackendEmployeeWithUser>(`/users/${id}`, employeeData); 
     console.log("[employeeService] Personel başarıyla güncellendi, Backend yanıtı:", response.data);
     return response.data;
   } catch (error) {

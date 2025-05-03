@@ -14,19 +14,16 @@ import {
   createEmployee, 
   uploadProfilePicture, 
   uploadEmployeeDocuments, 
-  BackendEmployeeWithUser
 } from "@/services/employeeService";
 import { getAllDepartments } from "@/services/departmentService"; 
 import { toast } from "sonner";
 import { Department } from "@/types/department";
 import { 
   EmployeeDocument, 
-  EmployeeWithRelations, 
-  NewEmployeePayload 
+  NewEmployeePayload, 
+  CreateUserResponse
 } from "@/types/employee"; 
 import axios, { AxiosError } from "axios";
-
-type CreatedEmployeeResponse = BackendEmployeeWithUser;
 
 type NewEmployeeFormState = Partial<Omit<NewEmployeePayload, 'roleId'> > & { 
   password?: string;
@@ -198,107 +195,85 @@ export default function NewEmployeePage() {
     const uploadErrors: string[] = [];
 
     try {
-      const apiPayload: Omit<NewEmployeePayload, 'roleId'> = {
+      const employeePayload: NewEmployeePayload = {
+        ...newEmployeeForm,
         firstName: newEmployeeForm.firstName!,
         lastName: newEmployeeForm.lastName!,
         email: newEmployeeForm.email!,
-        password: newEmployeeForm.password,
+        password: newEmployeeForm.password!,
         departmentId: newEmployeeForm.departmentId!,
         position: newEmployeeForm.position!,
         tcKimlikNo: newEmployeeForm.tcKimlikNo!,
-        phoneNumber: newEmployeeForm.phoneNumber || undefined,
-        hireDate: newEmployeeForm.hireDate || null,
-        birthDate: newEmployeeForm.birthDate || null,
-        address: newEmployeeForm.address || undefined,
-        iban: newEmployeeForm.iban || undefined,
-        bloodType: newEmployeeForm.bloodType || null,
-        drivingLicense: newEmployeeForm.drivingLicense || null,
-        education: newEmployeeForm.education || undefined,
-        militaryStatus: newEmployeeForm.militaryStatus || null,
         salary: newEmployeeForm.salary,
         annualLeaveAllowance: newEmployeeForm.annualLeaveAllowance,
-        emergencyContactName: newEmployeeForm.emergencyContactName || undefined,
-        emergencyContactPhone: newEmployeeForm.emergencyContactPhone || undefined,
-        emergencyContactRelation: newEmployeeForm.emergencyContactRelation || undefined,
-        profilePictureUrl: newEmployeeForm.profilePictureUrl || null
       };
 
-      console.log("Adım 1: Personel Oluşturma İsteği Gönderiliyor (roleId olmadan):", JSON.stringify(apiPayload, null, 2));
-      
-      let createdEmployeeResponse: CreatedEmployeeResponse | null = null;
-      try {
-         createdEmployeeResponse = await createEmployee(apiPayload); 
-      } catch (error) {
-          console.error("createEmployee API hatası:", error);
-          if (axios.isAxiosError(error)) {
-              const axiosError = error as AxiosError<any>;
-              const backendMessage = axiosError.response?.data?.message || axiosError.response?.data?.error || axiosError.message;
-              toast.error(`Personel oluşturulamadı: ${backendMessage}`);
-          } else {
-              toast.error(`Personel oluşturulamadı: ${error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu'}`);
-          }
-          setLoading(false);
-          return;
+      const createdEmployeeData: CreateUserResponse | null = await createEmployee(employeePayload);
+
+      if (!createdEmployeeData || !createdEmployeeData.id || !createdEmployeeData.employee?.id) { 
+        toast.error("API'den geçerli kullanıcı veya personel bilgileri alınamadı.");
+        console.error("API'den geçerli kullanıcı/personel ID'leri alınamadı. Dönen veri:", createdEmployeeData);
+        setLoading(false);
+        return;
       }
 
-      if (!createdEmployeeResponse || !createdEmployeeResponse.id || !createdEmployeeResponse.user?.id) {
-          console.error("API'den geçerli bir personel veya kullanıcı ID'si alınamadı.", createdEmployeeResponse);
-          toast.error("Personel oluşturuldu ancak sunucudan geçerli yanıt alınamadı.");
-          setLoading(false);
-          return;
-      }
-      
-      employeeId = createdEmployeeResponse.id;
-      userId = createdEmployeeResponse.user.id;
-      console.log(`Adım 1 Başarılı: Personel oluşturuldu (Employee ID: ${employeeId}, User ID: ${userId})`);
-      toast.success(`Personel ${createdEmployeeResponse.user?.firstName || ''} ${createdEmployeeResponse.user?.lastName || ''} temel bilgileriyle oluşturuldu.`);
+      userId = createdEmployeeData.id;
+      employeeId = createdEmployeeData.employee.id;
+
+      toast.success(`Personel ${createdEmployeeData.firstName || ''} ${createdEmployeeData.lastName || ''} başarıyla oluşturuldu.`);
 
       if (profileImageFile && userId) {
-          console.log(`Adım 2: Profil fotoğrafı yükleniyor (User ID: ${userId})...`);
-          const profileToastId = toast.loading("Profil fotoğrafı yükleniyor...");
-          try {
-              await uploadProfilePicture(userId, profileImageFile);
-              console.log("Adım 2 Başarılı: Profil fotoğrafı yüklendi.");
-              toast.success("Profil fotoğrafı başarıyla yüklendi.");
-              toast.dismiss(profileToastId);
-          } catch (profileError) {
-              const errorMessage = `Profil fotoğrafı yüklenemedi: ${profileError instanceof Error ? profileError.message : 'Bilinmeyen hata'}`;
-              console.error("Adım 2 Hatası:", errorMessage);
-              toast.error(errorMessage);
-              uploadErrors.push("Profil fotoğrafı yüklenemedi.");
-              toast.dismiss(profileToastId);
+        console.log(`[handleAddEmployee] Profil resmi yükleniyor (User ID: ${userId})...`);
+        try {
+          const uploadResult = await uploadProfilePicture(userId, profileImageFile);
+          if (uploadResult?.profilePictureUrl) {
+             toast.success("Profil resmi başarıyla yüklendi.");
+          } else {
+             throw new Error("Profil resmi yükleme API'si beklenen sonucu döndürmedi.");
           }
-      }
-      
-      const documentsToUpload = uploadedDocuments.filter(doc => doc.file);
-      if (documentsToUpload.length > 0 && employeeId) {
-          console.log(`Adım 3: ${documentsToUpload.length} döküman yükleniyor (Employee ID: ${employeeId})...`);
-          const docToastId = toast.loading(`${documentsToUpload.length} döküman yükleniyor...`);
-          try {
-              const filesToUpload = documentsToUpload.map(doc => doc.file as File);
-              await uploadEmployeeDocuments(employeeId, filesToUpload);
-              console.log("Adım 3 Başarılı: Dökümanlar yüklendi.");
-              toast.success(`${filesToUpload.length} döküman başarıyla yüklendi.`);
-              toast.dismiss(docToastId);
-          } catch (docError) {
-              const errorMessage = `Dökümanlar yüklenemedi: ${docError instanceof Error ? docError.message : 'Bilinmeyen hata'}`;
-              console.error("Adım 3 Hatası:", errorMessage);
-              toast.error(errorMessage);
-              uploadErrors.push("Dökümanlar yüklenemedi.");
-              toast.dismiss(docToastId);
-          }
+        } catch (uploadError) {
+          console.error("Profil resmi yükleme hatası:", uploadError);
+          const errorMsg = axios.isAxiosError(uploadError) 
+              ? uploadError.response?.data?.message || uploadError.message 
+              : (uploadError instanceof Error ? uploadError.message : "Bilinmeyen bir hata oluştu.");
+          uploadErrors.push(`Profil resmi yüklenemedi: ${errorMsg}`);
+        }
       }
 
-      if (uploadErrors.length === 0) {
-          toast.info("Tüm işlemler tamamlandı. Personel listesine yönlendiriliyorsunuz...");
-          router.push('/employees');
+      const filesToUpload = uploadedDocuments.map(doc => doc.file).filter((file): file is File => !!file);
+      if (filesToUpload.length > 0 && employeeId) {
+        console.log(`[handleAddEmployee] ${filesToUpload.length} döküman yükleniyor (Employee ID: ${employeeId})...`);
+        try {
+           const uploadedDocsResult = await uploadEmployeeDocuments(employeeId, filesToUpload);
+           if (uploadedDocsResult && uploadedDocsResult.length > 0) {
+               toast.success(`${uploadedDocsResult.length} döküman başarıyla yüklendi.`);
+           } else if (uploadedDocsResult) { 
+               toast.info("Dökümanlar yüklendi ancak sunucudan dosya bilgisi dönmedi.");
+           } else {
+               throw new Error("Döküman yükleme API'si beklenen sonucu döndürmedi veya hata oluştu.");
+           }
+        } catch (uploadError) {
+          console.error("Döküman yükleme hatası:", uploadError);
+           const errorMsg = axios.isAxiosError(uploadError) 
+              ? uploadError.response?.data?.message || uploadError.message 
+              : (uploadError instanceof Error ? uploadError.message : "Bilinmeyen bir hata oluştu.");
+          uploadErrors.push(`Döküman yüklenemedi: ${errorMsg}`);
+        }
+      }
+
+      if (uploadErrors.length > 0) {
+         toast.warning(`Personel oluşturuldu ancak bazı işlemler başarısız oldu:\n${uploadErrors.join("\n")}`);
+         router.push('/employees');
       } else {
-          toast.warning(`Personel oluşturuldu ancak ${uploadErrors.length} yükleme hatası oluştu: ${uploadErrors.join(', ')}`);
+        router.push('/employees');
       }
 
     } catch (error) {
-       console.error("Beklenmedik Genel Hata:", error);
-       toast.error("Personel eklenirken beklenmedik bir hata oluştu.");
+      console.error("Personel ekleme işlemi sırasında genel hata:", error);
+      const errorMsg = axios.isAxiosError(error)
+        ? error.response?.data?.message || error.message
+        : (error instanceof Error ? error.message : "Bilinmeyen bir hata oluştu.");
+      toast.error(`Personel oluşturulurken bir hata oluştu: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
