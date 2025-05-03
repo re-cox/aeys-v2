@@ -146,8 +146,8 @@ export const getUserById = async (req: Request, res: Response) => {
 export const createUser = async (req: Request, res: Response) => {
     const {
         email,
-        name,
-        surname,
+        firstName,
+        lastName,
         password,
         departmentId,
         position,
@@ -169,8 +169,8 @@ export const createUser = async (req: Request, res: Response) => {
      } = req.body;
 
     // --- Temel Doğrulamalar ---
-    if (!email || !password || !name || !surname || !departmentId || !position || !tcKimlikNo) {
-        console.error("[Controller] createUser - Eksik alanlar:", { email, name, surname, password, departmentId, position, tcKimlikNo });
+    if (!email || !password || !firstName || !lastName || !departmentId || !position || !tcKimlikNo) {
+        console.error("[Controller] createUser - Eksik alanlar:", { email, firstName, lastName, password, departmentId, position, tcKimlikNo });
         res.status(400).json({ message: 'İsim, soyisim, e-posta, şifre, departman, pozisyon ve TCKN zorunludur.' });
         return;
     }
@@ -187,8 +187,8 @@ export const createUser = async (req: Request, res: Response) => {
             const createdUser = await tx.user.create({
                 data: {
                     email,
-                    name,
-                    surname,
+                    firstName,
+                    lastName,
                     passwordHash,
                     role: { connect: { id: defaultRoleId } },
                 },
@@ -230,8 +230,8 @@ export const createUser = async (req: Request, res: Response) => {
                  select: {
                      id: true,
                      email: true,
-                     name: true,
-                     surname: true,
+                     firstName: true,
+                     lastName: true,
                      role: { select: { id: true, name: true } },
                      employee: { // Employee ilişkisini ve içindeki departmanı seç
                         select: {
@@ -293,8 +293,8 @@ export const updateUser = async (req: Request, res: Response) => {
     // Frontend'den gelen Employee partial tipine benzer alanlar
     const {
         email,
-        name,
-        surname,
+        firstName,
+        lastName,
         departmentId,
         position,
         phoneNumber, // Frontend'den phone olarak gelirse burada handle et
@@ -332,8 +332,8 @@ export const updateUser = async (req: Request, res: Response) => {
         // 2. Verileri Hazırla (User ve Employee için ayrı ayrı)
         const userDataToUpdate: Prisma.UserUpdateInput = {};
         if (email !== undefined) userDataToUpdate.email = email;
-        if (name !== undefined) userDataToUpdate.name = name;
-        if (surname !== undefined) userDataToUpdate.surname = surname;
+        if (firstName !== undefined) userDataToUpdate.firstName = firstName;
+        if (lastName !== undefined) userDataToUpdate.lastName = lastName;
         // Şifre ve rol güncellemesi burada yapılmamalı (ayrı/yetkili endpoint)
 
         const employeeDataToUpdate: Prisma.EmployeeUpdateInput = {};
@@ -393,7 +393,7 @@ export const updateUser = async (req: Request, res: Response) => {
             return await tx.user.findUnique({ 
                 where: { id },
                 select: { /* getUserById içindeki select alanları */
-                    id: true, email: true, name: true, surname: true, roleId: true, createdAt: true, updatedAt: true,
+                    id: true, email: true, firstName: true, lastName: true, roleId: true, createdAt: true, updatedAt: true,
                     role: { select: { name: true, permissions: true } },
                     employee: {
                         select: {
@@ -528,7 +528,8 @@ export const uploadProfileImage = async (req: Request, res: Response) => {
       where: { id },
       select: { 
         id: true, 
-        name: true, 
+        firstName: true, 
+        lastName: true,
         email: true,
         employee: {
           select: {
