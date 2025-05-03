@@ -1,9 +1,10 @@
 // API istekleri için servis sınıfı
-// import axios from 'axios'; // Kaldırıldı
-import { apiClient, handleApiError } from './api'; // handleApiError eklendi
-import { Employee, EmployeeDocument, NewEmployeePayload, UpdateEmployeePayload, CreateUserResponse } from '@/types/employee';
-import { Role } from '@/types/role'; // Rol tipi import edildi
-// import * as apiService from './api'; // Bu import muhtemelen gereksiz
+import { apiClient, handleApiError, API_URL } from './api';
+import { Employee, EmployeeDocument, NewEmployeePayload, UpdateEmployeePayload, CreateUserResponse, EmergencyContact } from '@/types/employee';
+import { Department } from '@/types/department';
+import { Role } from '@/types/role';
+import { toast } from 'sonner';
+import axios from 'axios';
 
 // Backend User tipi için daha doğru bir tanım (backend/src/controllers/user.controller.ts -> getUserById select ile uyumlu)
 // Export eklendi
@@ -20,7 +21,7 @@ export interface BackendUserData {
     name: string; 
     permissions?: any;
   };
-  // employee alanı çıkarıldı, getEmployeeById veya benzeri bir fonksiyonla alınmalı
+  employee?: any; // Employee alanı tipini sonra tanımladık
 }
 
 // Backend'den dönen Employee verisi için tip (ilişkili User ile)
@@ -53,14 +54,29 @@ export interface BackendEmployeeWithUser {
   emergencyContactPhone?: string | null;
   emergencyContactRelation?: string | null;
   documents?: EmployeeDocument[] | null;
-  user?: { // İlişkili User bilgisi (firstName, lastName olarak güncellendi)
+  user?: { // İlişkili User bilgisi
     id: string;
     email: string;
-    firstName?: string | null; // name -> firstName
-    lastName?: string | null;  // surname -> lastName
+    name?: string | null;
+    surname?: string | null;
     roleId: string;
     role?: { id: string; name: string; };
   } | null;
+}
+
+// Employee ile User tiplerini birleştiren yardımcı arayüz
+export interface EmployeeWithUserData extends Omit<Employee, 'user'> {
+  user?: {
+    id: string;
+    email: string;
+    name?: string | null;
+    surname?: string | null;
+    role?: {
+      id: string;
+      name: string;
+    };
+  };
+  roleId?: string;
 }
 
 // Ortama göre doğru API temel URL'ini belirle
@@ -85,14 +101,14 @@ const apiClient = axios.create({
 
 /**
  * Tüm kullanıcıları (personelleri) backend API'sinden getirir
- * Artık BackendEmployeeWithUser[] döndürecek şekilde map'leme yapmalı
+ * Artık Employee[] döndürecek şekilde map'leme yapmalı
  */
-export async function getAllEmployees(includeSalary: boolean = false): Promise<BackendEmployeeWithUser[]> { 
+export async function getAllEmployees(includeSalary: boolean = false): Promise<Employee[]> { 
   const context = "Tüm Personelleri Getir"; 
   console.log(`[employeeService] Backend'den tüm kullanıcılar getiriliyor... (Maaş dahil: ${includeSalary})`);
   try {
     const endpoint = `/users?includeEmployee=true${includeSalary ? '&includeSalary=true' : ''}`; // includeEmployee=true ekle
-    const response = await apiClient.get<BackendEmployeeWithUser[]>(endpoint); 
+    const response = await apiClient.get<any[]>(endpoint); 
     console.log(`[employeeService] Backend'den ${response.data.length} kullanıcı alındı.`);
     
     if (!response.data || response.data.length === 0) {
@@ -100,9 +116,28 @@ export async function getAllEmployees(includeSalary: boolean = false): Promise<B
       return []; 
     }
     
-    // Backend verisi zaten BackendEmployeeWithUser formatında olmalı
-    // Map'lemeye gerek yok, direkt döndür
-    return response.data;
+    // Backend verisini Employee tipine dönüştürüyoruz
+    return response.data.map((user, index) => {
+      // Employee ID'si yoksa kullanıcı ID'si veya index kullanılarak benzersiz bir değer oluştur
+      const uniqueId = user.employee?.id || user.id || `generated-id-${index}`;
+      
+      const employee: Employee = {
+        id: uniqueId, // Benzersiz ID sağla
+        userId: user.id || `user-${index}`, // Benzersiz user ID
+        name: user.name || "",
+        surname: user.surname || "",
+        email: user.email || "",
+        position: user.employee?.position || "",
+        phoneNumber: user.employee?.phoneNumber || "",
+        tcKimlikNo: user.employee?.tcKimlikNo || "",
+        hireDate: user.employee?.hireDate || null,
+        profilePictureUrl: user.employee?.profilePictureUrl || null,
+        departmentId: user.employee?.departmentId || null,
+        department: user.employee?.department || null,
+        isActive: true
+      };
+      return employee;
+    });
 
   } catch (error) {
     console.error('[employeeService] Personel verileri alınırken hata oluştu:', error); 
@@ -113,21 +148,87 @@ export async function getAllEmployees(includeSalary: boolean = false): Promise<B
 
 /**
  * Belirli bir personelin bilgilerini backend API'sinden getirir
- * Backend endpoint: /api/users/:id?includeEmployee=true
- * Dönen tip BackendEmployeeWithUser olmalı
+ * Endpointi düzeltme: User yerine Employee endpoint'i kullanılacak
+ * Backend endpoint: /api/employees/:id
  */
-export async function getEmployeeById(id: string): Promise<BackendEmployeeWithUser | null> { 
+export async function getEmployeeById(id: string): Promise<EmployeeWithUserData | null> { 
   const context = `Personel Getir (ID: ${id})`; 
-  console.log(`[employeeService] getEmployeeById çağrıldı (ID: ${id}) - Backend endpoint /api/users/${id}?includeEmployee=true`);
+  console.log(`[employeeService] getEmployeeById çağrıldı (ID: ${id})`);
+  console.log(`[employeeService] API URL: ${API_URL}`);
+  
   try {
-    const response = await apiClient.get<BackendEmployeeWithUser>(`/users/${id}?includeEmployee=true`); 
+    // API URL değiştiriliyor: /users/:id?includeEmployee=true --> /employees/:id
+    console.log(`[employeeService] İstek yolu: /employees/${id}`);
+    const fullUrl = `${API_URL}/employees/${id}`;
+    console.log(`[employeeService] Tam URL: ${fullUrl}`);
+    
+    const response = await apiClient.get<any>(`/employees/${id}`);
+    
+    if (!response.data || !response.data.success) {
+      console.warn(`[employeeService] ID: ${id} için veritabanında personel kaydı bulunamadı.`);
+      return null;
+    }
+    
+    // API yanıt yapısını düzenliyoruz çünkü employees endpoint'i farklı formatta dönüyor
+    const employeeData = response.data.data; // Employees API { success: true, data: {...} } formatında
+    
+    // Employees formatını frontend formatına dönüştürüyoruz
+    const employeeWithUserData: EmployeeWithUserData = {
+      id: employeeData.id,
+      userId: employeeData.userId,
+      email: employeeData.userEmail || '', // Email bilgisi yoksa boş string
+      name: employeeData.userName || '',
+      surname: employeeData.userSurname || '',
+      // Diğer employee alanları
+      position: employeeData.position || null,
+      phoneNumber: employeeData.phoneNumber || null,
+      departmentId: employeeData.departmentId || null,
+      department: employeeData.department || null,
+      tcKimlikNo: employeeData.tcKimlikNo || null,
+      hireDate: employeeData.hireDate || null,
+      birthDate: employeeData.birthDate || null, 
+      address: employeeData.address || null,
+      iban: employeeData.iban || null,
+      bloodType: employeeData.bloodType || null,
+      drivingLicense: employeeData.drivingLicense || null,
+      education: employeeData.education || null,
+      militaryStatus: employeeData.militaryStatus || null,
+      profilePictureUrl: employeeData.profilePictureUrl || null,
+      salary: employeeData.salary ?? null,
+      annualLeaveAllowance: employeeData.annualLeaveAllowance ?? null,
+      emergencyContactName: employeeData.emergencyContactName || null,
+      emergencyContactPhone: employeeData.emergencyContactPhone || null,
+      emergencyContactRelation: employeeData.emergencyContactRelation || null,
+      documents: employeeData.documents || [],
+      isActive: employeeData.isActive ?? true,
+      createdAt: employeeData.createdAt,
+      updatedAt: employeeData.updatedAt
+    };
+
     console.log("[employeeService] Backend'den alınan veri:", response.data);
-    return response.data; 
+    console.log("[employeeService] Dönüştürülmüş veri:", employeeWithUserData);
+    return employeeWithUserData; 
     
   } catch (error) {
-    console.error(`[employeeService] ID'si ${id} olan personel alınırken hata oluştu:`, error); 
-    handleApiError(error, context); 
-    return null; 
+    console.error(`[employeeService] ${context} işlemi başarısız:`, error);
+    
+    // API hatası için toast göster
+    if (axios.isAxiosError(error)) {
+      const status = error.response?.status;
+      const errorMessage = error.response?.data?.message || error.message;
+      
+      if (status === 404) {
+        toast.error(`Personel bulunamadı. (ID: ${id})`);
+      } else {
+        toast.error(`${context} işlemi başarısız: ${errorMessage}`);
+      }
+    } else if (error instanceof Error) {
+      toast.error(`${context} işlemi başarısız: ${error.message}`);
+    } else {
+      toast.error(`${context} işlemi başarısız: Bilinmeyen hata`);
+    }
+    
+    throw error; // Hatayı yukarıya fırlat
   }
 }
 
@@ -199,10 +300,10 @@ export async function deleteEmployee(id: string): Promise<boolean> {
 
 /**
  * Profil resmini yükler (Backend API'sine gönderir)
- * Backend endpoint: POST /api/employees/:employeeId/profile-picture
- * @param employeeId Profil resminin ait olduğu personelin ID'si
+ * Backend endpoint: POST /api/users/:userId/profile-picture
+ * @param userId Profil resminin ait olduğu kullanıcının ID'si
  * @param file Yüklenecek resim dosyası
- * @returns Güncellenmiş personel bilgisi veya URL
+ * @returns Yüklenen resmin URL'i
  */
 export async function uploadProfilePicture(userId: string, file: File): Promise<{ profilePictureUrl: string } | null> {
   const context = `Profil Fotoğrafı Yükle (User ID: ${userId})`;
@@ -211,14 +312,27 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
   formData.append('profilePicture', file);
 
   try {
-    // Endpoint güncellendi
-    const response = await apiClient.post<{ profilePictureUrl: string }>(`/users/${userId}/profile-picture`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
+    // Endpoint: /users/:userId/profile-picture 
+    const response = await apiClient.post<{ success: boolean, profilePictureUrl: string, message: string }>(
+      `/users/${userId}/profile-picture`, 
+      formData, 
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      }
+    );
+    
     console.log("[employeeService] Profil fotoğrafı başarıyla yüklendi:", response.data);
-    return response.data;
+    
+    if (response.data.success && response.data.profilePictureUrl) {
+      return { 
+        profilePictureUrl: response.data.profilePictureUrl 
+      };
+    } else {
+      toast.error("Profil fotoğrafı yüklendi fakat URL alınamadı.");
+      return null;
+    }
   } catch (error) {
     console.error('[employeeService] Profil fotoğrafı yüklenirken hata oluştu:', error);
     handleApiError(error, context);

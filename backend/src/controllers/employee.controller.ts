@@ -222,16 +222,32 @@ export const getEmployeeById = async (
 ): Promise<void> => {
   try {
     const { employeeId } = req.params;
+    console.log(`[Backend Employee] getEmployeeById çağrıldı. ID: ${employeeId}`);
     
     const employee = await prismaClient.employee.findUnique({
       where: { id: employeeId },
       include: {
         department: true,
-        documents: true
+        documents: true,
+        user: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            surname: true,
+            role: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        }
       }
     });
 
     if (!employee) {
+      console.log(`[Backend Employee] ID'si ${employeeId} olan çalışan bulunamadı.`);
       res.status(404).json({
         success: false,
         message: 'Çalışan bulunamadı'
@@ -239,9 +255,26 @@ export const getEmployeeById = async (
       return;
     }
 
+    // Employee datasını frontend için formatla
+    const formattedData = {
+      ...employee,
+      // Employee bilgilerine ilişkili user verilerinden de eklemeler yapılıyor
+      userEmail: employee.user?.email,
+      userName: employee.user?.name,
+      userSurname: employee.user?.surname,
+      userRole: employee.user?.role,
+      // Maaş ve acil durum iletişim bilgilerinin null olsa bile dönmesini sağlayalım
+      salary: employee.salary || null,
+      emergencyContactName: employee.emergencyContactName || null,
+      emergencyContactPhone: employee.emergencyContactPhone || null,
+      emergencyContactRelation: employee.emergencyContactRelation || null
+    };
+
+    console.log(`[Backend Employee] ID'si ${employeeId} olan çalışan bulundu.`);
+    
     res.status(200).json({
       success: true,
-      data: employee
+      data: formattedData
     });
   } catch (error) {
     console.error('Çalışan bilgisi alınırken hata:', error);

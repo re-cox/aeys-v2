@@ -1,78 +1,45 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-const client_1 = require("@prisma/client");
+const errorLogger_1 = require("./errorLogger");
 /**
- * Hata işleme yardımcı fonksiyonu
- * Farklı hata türlerini işler ve uygun HTTP durum kodu ve hata mesajı ile yanıt verir
+ * Merkezi hata işleme middleware'i
+ * @param error Yakalanan hata
+ * @param req Express request nesnesi
+ * @param res Express response nesnesi
  */
 const errorHandler = (error, req, res) => {
     var _a;
-    console.error(`[Error Handler] Hata işleniyor:`, error);
-    // Prisma veritabanı hatalarını işle
-    if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
-        // Unique constraint ihlali
-        if (error.code === 'P2002') {
-            const field = (_a = error.meta) === null || _a === void 0 ? void 0 : _a.target;
-            return res.status(409).json({
-                error: `Bu ${field ? field.join(', ') : 'değer'} zaten kullanılıyor.`,
-                code: error.code
-            });
-        }
-        // Kayıt bulunamadı
-        if (error.code === 'P2001' || error.code === 'P2018') {
-            return res.status(404).json({
-                error: 'Belirtilen kayıt bulunamadı.',
-                code: error.code
-            });
-        }
-        // Foreign key constraint ihlali
-        if (error.code === 'P2003') {
-            return res.status(400).json({
-                error: 'İlişkili bir kayıt nedeniyle bu işlem gerçekleştirilemiyor.',
-                code: error.code
-            });
-        }
-        // Diğer Prisma hataları
+    // Hatayı logla
+    (0, errorLogger_1.errorLogger)('Beklenmeyen hata', error);
+    // Hata tipine göre uygun HTTP yanıtı döndür
+    if (error.name === 'ValidationError') {
         return res.status(400).json({
-            error: 'Veritabanı işlemi sırasında bir hata oluştu.',
-            details: error.message,
-            code: error.code
-        });
-    }
-    // Prisma başlatma hatası
-    if (error instanceof client_1.Prisma.PrismaClientInitializationError) {
-        console.error('[Error Handler] Veritabanı bağlantı hatası:', error);
-        return res.status(500).json({
-            error: 'Veritabanına bağlanırken bir hata oluştu. Lütfen sistem yöneticinize başvurun.',
+            error: 'Doğrulama hatası',
             details: error.message
         });
     }
-    // Prisma sorgu zamanı hatası
-    if (error instanceof client_1.Prisma.PrismaClientRustPanicError) {
-        console.error('[Error Handler] Kritik Prisma hatası:', error);
-        return res.status(500).json({
-            error: 'Veritabanı işlemi sırasında kritik bir hata oluştu.',
+    if (error.name === 'UnauthorizedError' || ((_a = error.message) === null || _a === void 0 ? void 0 : _a.includes('JWT'))) {
+        return res.status(401).json({
+            error: 'Yetkilendirme hatası',
             details: error.message
         });
     }
-    // Prisma genel hataları
-    if (error instanceof client_1.Prisma.PrismaClientUnknownRequestError) {
-        return res.status(500).json({
-            error: 'Veritabanı işlemi sırasında bilinmeyen bir hata oluştu.',
+    if (error.name === 'ForbiddenError') {
+        return res.status(403).json({
+            error: 'Erişim reddedildi',
             details: error.message
         });
     }
-    // Bilinmeyen hata
-    if (error instanceof Error) {
-        return res.status(500).json({
-            error: 'Bir hata oluştu.',
+    if (error.name === 'NotFoundError') {
+        return res.status(404).json({
+            error: 'Kaynak bulunamadı',
             details: error.message
         });
     }
-    // Varsayılan hata yanıtı
+    // Diğer hatalar için 500 Internal Server Error
     return res.status(500).json({
-        error: 'Sunucu hatası.',
-        details: 'Bilinmeyen bir hata oluştu.'
+        error: 'Sunucu hatası',
+        details: error.message || 'Beklenmeyen bir hata oluştu'
     });
 };
 exports.default = errorHandler;

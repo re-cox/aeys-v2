@@ -24,6 +24,9 @@ app.use((0, cors_1.default)({
 app.use('/api/departments', department_routes_1.default);
 app.use('/api/users', user_routes_1.default);
 app.use('/api/attendances', attendance_routes_1.default);
+// Progress Payments rotasını ekle
+const progressPayment_routes_1 = __importDefault(require("./routes/progressPayment.routes"));
+app.use('/api/progress-payments', progressPayment_routes_1.default);
 // ... (hata yönetimi middleware'i)
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {

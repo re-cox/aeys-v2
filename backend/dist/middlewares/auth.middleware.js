@@ -17,6 +17,8 @@ const auth_1 = require("../utils/auth");
 const prisma_1 = require("../lib/prisma");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const client_1 = require("@prisma/client");
+const env_1 = require("../config/env");
+const errorLogger_1 = require("../utils/errorLogger");
 const prismaClient = new client_1.PrismaClient();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 // Token doğrulama ara katmanı
@@ -130,69 +132,81 @@ const protect = (req, res, next) => __awaiter(void 0, void 0, void 0, function* 
     }
 });
 exports.protect = protect;
+/**
+ * Kimlik doğrulama middleware'i
+ * JWT token'ı doğrular ve kullanıcı bilgilerini req.user'a ekler
+ */
 const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Token'ı al
+        console.log('[Auth Middleware] İstek geldi:', req.method, req.originalUrl);
+        console.log('[Auth Middleware] Headers:', JSON.stringify(req.headers, null, 2));
+        // Authorization header'ını kontrol et
         const authHeader = req.headers.authorization;
         if (!authHeader) {
-            console.error('[Auth Middleware] Token bulunamadı: Authorization header eksik');
-            return res.status(401).json({ error: 'Yetkilendirme hatası: Token bulunamadı' });
+            console.error('[Auth Middleware] Authorization header yok!');
+            return res.status(401).json({ error: 'Erişim reddedildi: Yetkilendirme token\'ı gerekli' });
         }
-        const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+        if (!authHeader.startsWith('Bearer ')) {
+            console.error('[Auth Middleware] Authorization header Bearer formatında değil:', authHeader);
+            return res.status(401).json({ error: 'Erişim reddedildi: Geçersiz token formatı' });
+        }
+        // Token'ı çıkar
+        const token = authHeader.split(' ')[1];
         if (!token) {
-            console.error('[Auth Middleware] Token boş: Authorization header mevcut ama token boş');
-            return res.status(401).json({ error: 'Yetkilendirme hatası: Geçersiz token formatı' });
+            console.error('[Auth Middleware] Token boş!');
+            return res.status(401).json({ error: 'Erişim reddedildi: Geçersiz token formatı' });
         }
-        console.log('[Auth Middleware] Token doğrulanıyor...');
+        console.log('[Auth Middleware] Token alındı, doğrulanıyor...');
         try {
-            // JWT token'ı doğrula
-            const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
-            if (!decoded || typeof decoded !== 'object') {
-                console.error('[Auth Middleware] Token decode hatası: Geçersiz token formatı');
-                return res.status(401).json({ error: 'Yetkilendirme hatası: Geçersiz token içeriği' });
-            }
-            // Token içeriğinin doğru olup olmadığını kontrol et
-            // Not: Farklı token formatları için iki olasılığı kontrol edelim (id veya userId)
-            const userId = decoded.id || decoded.userId;
-            if (!userId) {
-                console.error('[Auth Middleware] Token içeriği hatalı: id veya userId bulunamadı', decoded);
-                return res.status(401).json({ error: 'Yetkilendirme hatası: Geçersiz token içeriği' });
-            }
-            // Kullanıcıyı veritabanından bul
-            console.log(`[Auth Middleware] Kullanıcı sorgulanıyor: ${userId}`);
-            const user = yield prismaClient.user.findUnique({
-                where: { id: userId },
+            // Token'ı doğrula
+            const decoded = jsonwebtoken_1.default.verify(token, env_1.env.JWT_SECRET);
+            console.log('[Auth Middleware] Token doğrulandı. Payload:', JSON.stringify(decoded, null, 2));
+            // Kullanıcıyı veritabanında kontrol et
+            console.log('[Auth Middleware] Kullanıcı ID:', decoded.userId);
+            const user = yield prisma_1.prisma.user.findUnique({
+                where: { id: decoded.userId },
                 select: {
                     id: true,
                     email: true,
                     name: true,
-                    surname: true,
-                    role: true
+                    roleId: true
                 }
             });
+            // Kullanıcı yoksa
             if (!user) {
-                console.error(`[Auth Middleware] Kullanıcı bulunamadı: ${userId}`);
-                return res.status(401).json({ error: 'Yetkilendirme hatası: Kullanıcı bulunamadı' });
+                console.error('[Auth Middleware] Kullanıcı bulunamadı:', decoded.userId);
+                return res.status(401).json({ error: 'Erişim reddedildi: Kullanıcı bulunamadı' });
             }
-            console.log(`[Auth Middleware] Yetkilendirme başarılı: ${user.name || user.email}`);
-            // Kullanıcıyı request nesnesine ekle
+            console.log('[Auth Middleware] Kullanıcı doğrulandı:', user.email);
+            // Kullanıcı bilgilerini request nesnesine ekle
             req.user = {
                 id: user.id,
                 email: user.email,
-                role: typeof user.role === 'object' && user.role !== null ? user.role.name : 'user',
-                permissions: typeof user.role === 'object' && user.role !== null ? user.role.permissions : {}
+                name: user.name || undefined
             };
-            // Devam et
+            console.log('[Auth Middleware] Yetkilendirme başarılı, sonraki middleware\'e geçiliyor');
+            // Sonraki middleware'e geç
             next();
         }
-        catch (jwtError) {
-            console.error('[Auth Middleware] Token doğrulama hatası:', jwtError);
-            return res.status(401).json({ error: 'Yetkilendirme hatası: Geçersiz token' });
+        catch (tokenError) {
+            // JWT doğrulama hatası
+            console.error('[Auth Middleware] Token doğrulama hatası:', tokenError);
+            if (tokenError.name === 'TokenExpiredError') {
+                console.error('[Auth Middleware] Token süresi dolmuş!');
+                return res.status(401).json({ error: 'Erişim reddedildi: Token süresi dolmuş' });
+            }
+            if (tokenError.name === 'JsonWebTokenError') {
+                console.error('[Auth Middleware] Geçersiz JWT formatı!');
+                return res.status(401).json({ error: 'Erişim reddedildi: Geçersiz token formatı' });
+            }
+            return res.status(401).json({ error: 'Erişim reddedildi: Geçersiz token' });
         }
     }
     catch (error) {
-        console.error('[Auth Middleware] Beklenmeyen yetkilendirme hatası:', error);
-        return res.status(500).json({ error: 'Sunucu hatası' });
+        // Diğer hatalar
+        console.error('[Auth Middleware] Beklenmeyen hata:', error);
+        (0, errorLogger_1.errorLogger)('Yetkilendirme hatası', error);
+        return res.status(500).json({ error: 'Sunucu hatası: Yetkilendirme işlemi sırasında bir hata oluştu' });
     }
 });
 exports.authenticate = authenticate;

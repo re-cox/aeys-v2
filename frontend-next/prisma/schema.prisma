@@ -430,3 +430,44 @@ model EdasNotificationDocument {
   uploadedAt DateTime             @default(now())
   step       EdasNotificationStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
 }
+// Hakediş ve ilgili belge modelleri için Prisma şema güncellemesi
+// Bu dosyayı mevcut schema.prisma dosyasına ekleyin
+
+enum ProgressPaymentStatus {
+  DRAFT
+  SUBMITTED
+  PENDING
+  APPROVED
+  PAID
+  PARTIALLY_PAID
+  REJECTED
+}
+
+model ProgressPayment {
+  id              String                   @id @default(uuid())
+  projectId       String
+  paymentNumber   Int
+  description     String
+  requestedAmount Float
+  approvedAmount  Float?
+  paidAmount      Float?
+  status          ProgressPaymentStatus    @default(DRAFT)
+  dueDate         DateTime?
+  paymentDate     DateTime?
+  notes           String?
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+  project         Project                  @relation(fields: [projectId], references: [id])
+  documents       ProgressPaymentDocument[]
+}
+
+model ProgressPaymentDocument {
+  id                String         @id @default(uuid())
+  progressPaymentId String
+  fileName          String
+  fileUrl           String
+  fileType          String
+  fileSize          Int
+  uploadDate        DateTime      @default(now())
+  progressPayment   ProgressPayment @relation(fields: [progressPaymentId], references: [id], onDelete: Cascade)
+}

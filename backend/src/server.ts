@@ -26,6 +26,10 @@ app.use('/api/departments', departmentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/attendances', attendanceRoutes);
 
+// Progress Payments rotasını ekle
+import progressPaymentRoutes from './routes/progressPayment.routes';
+app.use('/api/progress-payments', progressPaymentRoutes);
+
 // ... (hata yönetimi middleware'i)
 
 const PORT = process.env.PORT || 5001;
@@ -44,4 +48,4 @@ process.on('uncaughtException', (error) => {
   console.error('Uncaught Exception thrown:', error);
   // Uygulamayı kapatma veya başka işlemler yapılabilir
   process.exit(1);
-}); 
+});

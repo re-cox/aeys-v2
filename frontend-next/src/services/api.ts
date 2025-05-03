@@ -2,7 +2,9 @@ import axios, { AxiosError } from 'axios';
 import { TeknisyenRaporu, TeknisyenRaporuDurum, Personel, TeknisyenDokuman } from '@/types/teknisyen';
 import { toast } from "sonner";
 
+// API_URL yapısını düzenliyoruz
 export const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api';
+console.log('API_URL değeri:', API_URL);
 
 export const apiClient = axios.create({
   baseURL: API_URL,

@@ -12,365 +12,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-const express_1 = require("express");
-const client_1 = require("@prisma/client");
-const fs_1 = __importDefault(require("fs"));
-const express_fileupload_1 = __importDefault(require("express-fileupload"));
-const error_handler_1 = require("../utils/error-handler");
-const router = (0, express_1.Router)();
-const prisma = new client_1.PrismaClient();
-// GET: Tüm BEDAŞ/AYEDAŞ bildirimlerini getir
-router.get('/bedas/notifications', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    console.log("[BEDAS API] Bildirimler isteniyor...");
-    const { status } = req.query;
-    let where = { company: "BEDAŞ" };
-    // Durum filtresi varsa uygula
-    if (status && ["PENDING", "APPROVED", "REJECTED"].includes(status)) {
-        where.status = status;
-    }
-    const notifications = yield prisma.edasNotification.findMany({
-        where,
-        include: {
-            steps: {
-                include: {
-                    documents: true,
-                },
-            },
-        },
-        orderBy: {
-            createdAt: 'desc',
-        },
-    });
-    console.log(`[BEDAS API] ${notifications.length} bildirim başarıyla alındı.`);
-    return res.json({
-        success: true,
-        data: notifications
-    });
-})));
-// GET: Tek bir BEDAŞ bildirimini getir
-router.get('/bedas/notifications/:id', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirim detayı isteniyor...`);
-    // ID için ekstra kontrol
-    if (!id || id === 'undefined' || id === 'null') {
-        console.error(`[BEDAS API] Geçersiz ID: "${id}"`);
-        return res.status(400).json({
-            success: false,
-            message: "Geçersiz bildirim ID'si."
-        });
-    }
-    console.log(`[BEDAS API] Bildirim aranıyor, ID: ${id}`);
-    // Prisma ile bildirimi bul
-    const notification = yield prisma.edasNotification.findUnique({
-        where: { id },
-        include: {
-            steps: {
-                include: {
-                    documents: true,
-                },
-            },
-        },
-    });
-    console.log(`[BEDAS API] Sorgu tamamlandı. Bildirim ${notification ? 'bulundu' : 'bulunamadı'}`);
-    if (!notification) {
-        console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: `${id} ID'li bildirim bulunamadı.`,
-        });
-    }
-    console.log(`[BEDAS API] ${id} ID'li bildirim başarıyla alındı: ${notification.refNo}`);
-    return res.json({
-        success: true,
-        data: notification,
-    });
-})));
-// POST: Yeni BEDAŞ bildirimi oluştur
-router.post('/bedas/notifications', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        console.log(`[BEDAS API] Yeni bildirim oluşturma isteği alındı:`, req.body);
-        const body = req.body;
-        // İstek içeriği kontrolü
-        if (!body) {
-            console.error(`[BEDAS API] Geçersiz istek: Body boş`);
-            return res.status(400).json({
-                success: false,
-                message: `Geçersiz istek: Veri gönderilmedi.`
-            });
-        }
-        // Her alanın tipini kontrol et ve loglama yap
-        console.log(`[BEDAS API] İstek içeriği analizi:`, {
-            refNo: `${body.refNo} (${typeof body.refNo})`,
-            customerName: `${body.customerName} (${typeof body.customerName})`,
-            applicationType: `${body.applicationType} (${typeof body.applicationType})`,
-            projectName: `${body.projectName} (${typeof body.projectName})`,
-            city: `${body.city} (${typeof body.city})`,
-            district: `${body.district} (${typeof body.district})`,
-            parcelBlock: `${body.parcelBlock} (${typeof body.parcelBlock})`,
-            parcelNo: `${body.parcelNo} (${typeof body.parcelNo})`,
-        });
-        // Zorunlu alanları kontrol et
-        const requiredFields = ["refNo", "customerName", "applicationType"];
-        const missingFields = requiredFields.filter(field => !body[field]);
-        if (missingFields.length > 0) {
-            console.error(`[BEDAS API] Eksik zorunlu alanlar: ${missingFields.join(", ")}`);
-            return res.status(400).json({
-                success: false,
-                message: `Zorunlu alanlar eksik: ${missingFields.join(", ")}`
-            });
-        }
-        // Uygulama tipi kontrolü
-        if (body.applicationType && !["NIHAI_BAGLANTI", "SANTIYE"].includes(body.applicationType)) {
-            console.error(`[BEDAS API] Geçersiz uygulama tipi: ${body.applicationType}`);
-            return res.status(400).json({
-                success: false,
-                message: `Geçersiz uygulama tipi. "NIHAI_BAGLANTI" veya "SANTIYE" olmalıdır.`
-            });
-        }
-        // Referans numarasının benzersiz olup olmadığını kontrol et
-        console.log(`[BEDAS API] Referans numarası kontrolü: ${body.refNo}`);
-        const existingNotification = yield prisma.edasNotification.findUnique({
-            where: { refNo: body.refNo },
-        });
-        if (existingNotification) {
-            console.error(`[BEDAS API] Bildirim zaten mevcut: ${body.refNo}`);
-            return res.status(400).json({
-                success: false,
-                message: `Bu referans numarası (${body.refNo}) ile zaten bir bildirim mevcut.`
-            });
-        }
-        // Yeni bildirim oluştur
-        console.log(`[BEDAS API] Bildirim oluşturuluyor...`);
-        const newNotification = yield prisma.edasNotification.create({
-            data: {
-                refNo: body.refNo,
-                projectName: body.projectName || null,
-                applicationType: body.applicationType,
-                customerName: body.customerName,
-                city: body.city || null,
-                district: body.district || null,
-                parcelBlock: body.parcelBlock || null,
-                parcelNo: body.parcelNo || null,
-                company: "BEDAŞ",
-                status: "PENDING",
-                currentStep: "PROJE",
-                notes: body.notes || null,
-                steps: {
-                    create: [
-                        {
-                            stepType: "PROJE",
-                            status: "PENDING",
-                            refNo: body.refNo + "-P",
-                            startDate: new Date(),
-                        }
-                    ]
-                }
-            },
-            include: {
-                steps: true,
-            },
-        });
-        console.log(`[BEDAS API] Bildirim başarıyla oluşturuldu. ID: ${newNotification.id}, RefNo: ${newNotification.refNo}`);
-        return res.status(201).json({
-            success: true,
-            data: newNotification,
-            message: "Bildirim başarıyla oluşturuldu."
-        });
-    }
-    catch (error) {
-        console.error("[BEDAS API] Bildirim oluşturulurken hata:", error);
-        console.error("[BEDAS API] Hata mesajı:", error.message);
-        if (error.code)
-            console.error("[BEDAS API] Hata kodu:", error.code);
-        // Veritabanı bağlantı hataları için özel kontrol
-        if (error.code === 'P1001' || error.code === 'P1002') {
-            return res.status(500).json({
-                success: false,
-                message: "Veritabanı bağlantı hatası. Lütfen daha sonra tekrar deneyin.",
-                error: error.message,
-                errorCode: error.code,
-                stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-            });
-        }
-        // Validasyon hataları
-        if (error.code === 'P2002') {
-            return res.status(400).json({
-                success: false,
-                message: "Bu referans numarası ile zaten bir kayıt mevcut.",
-                error: error.message,
-                errorCode: error.code,
-                stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-            });
-        }
-        return res.status(500).json({
-            success: false,
-            message: "Bildirim oluşturulurken bir hata oluştu.",
-            error: error.message,
-            errorCode: error.code,
-            stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-        });
-    }
-}));
-// PUT: BEDAŞ bildirimini güncelle
-router.put('/bedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        const body = req.body;
-        // Bildirim var mı kontrol et
-        const existingNotification = yield prisma.edasNotification.findUnique({
-            where: { id },
-        });
-        if (!existingNotification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`,
-            });
-        }
-        // Bildirim güncelle
-        const updatedNotification = yield prisma.edasNotification.update({
-            where: { id },
-            data: {
-                projectName: body.projectName !== undefined ? body.projectName : existingNotification.projectName,
-                customerName: body.customerName || existingNotification.customerName,
-                city: body.city !== undefined ? body.city : existingNotification.city,
-                district: body.district !== undefined ? body.district : existingNotification.district,
-                parcelBlock: body.parcelBlock !== undefined ? body.parcelBlock : existingNotification.parcelBlock,
-                parcelNo: body.parcelNo !== undefined ? body.parcelNo : existingNotification.parcelNo,
-                status: body.status || existingNotification.status,
-                currentStep: body.currentStep || existingNotification.currentStep,
-                notes: body.notes !== undefined ? body.notes : existingNotification.notes,
-            },
-            include: {
-                steps: {
-                    include: {
-                        documents: true,
-                    },
-                },
-            },
-        });
-        return res.json({
-            success: true,
-            data: updatedNotification,
-            message: "Bildirim başarıyla güncellendi."
-        });
-    }
-    catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Bildirim güncellenirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// DELETE: BEDAŞ bildirimini sil
-router.delete('/bedas/notifications/:id', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirim silinme işlemi başlatıldı`);
-    // ID için ekstra kontrol
-    if (!id || id === 'undefined' || id === 'null') {
-        console.error(`[BEDAS API] Geçersiz ID: "${id}"`);
-        return res.status(400).json({
-            success: false,
-            message: "Geçersiz bildirim ID'si."
-        });
-    }
-    console.log(`[BEDAS API] Bildirim aranıyor, ID: ${id}`);
-    // Bildirim var mı kontrol et
-    const existingNotification = yield prisma.edasNotification.findUnique({
-        where: { id },
-        include: {
-            steps: {
-                include: {
-                    documents: true
-                }
-            }
-        }
-    });
-    console.log(`[BEDAS API] Sorgu tamamlandı. Bildirim ${existingNotification ? 'bulundu' : 'bulunamadı'}`);
-    if (!existingNotification) {
-        console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: `${id} ID'li bildirim bulunamadı.`,
-        });
-    }
-    console.log(`[BEDAS API] Bildirim bulundu, silme işlemi gerçekleştiriliyor: ${existingNotification.refNo}`);
-    // Önce belgeleri sil (cascade silinme çalışmıyorsa manuel sileriz)
-    if (existingNotification.steps && existingNotification.steps.length > 0) {
-        for (const step of existingNotification.steps) {
-            if (step.documents && step.documents.length > 0) {
-                console.log(`[BEDAS API] ${step.id} ID'li adıma ait ${step.documents.length} belge siliniyor`);
-                // Fiziksel dosyaları da sil
-                for (const doc of step.documents) {
-                    try {
-                        if (doc.fileUrl && fs_1.default.existsSync(doc.fileUrl)) {
-                            yield fs_1.default.promises.unlink(doc.fileUrl);
-                            console.log(`[BEDAS API] Fiziksel dosya silindi: ${doc.fileUrl}`);
-                        }
-                    }
-                    catch (fileError) {
-                        console.error(`[BEDAS API] Dosya silinemedi: ${doc.fileUrl}`, fileError);
-                        // Hata olsa bile devam et
-                    }
-                }
-                yield prisma.edasNotificationDocument.deleteMany({
-                    where: { stepId: step.id }
-                });
-            }
-        }
-        // Sonra adımları sil
-        console.log(`[BEDAS API] ${existingNotification.steps.length} adım siliniyor`);
-        yield prisma.edasNotificationStep.deleteMany({
-            where: { notificationId: id }
-        });
-    }
-    // En son bildirimi sil
-    yield prisma.edasNotification.delete({
-        where: { id },
-    });
-    console.log(`[BEDAS API] ${id} ID'li bildirim başarıyla silindi.`);
-    return res.json({
-        success: true,
-        message: "Bildirim başarıyla silindi."
-    });
-})));
-// AYEDAŞ bildirimlerini getir
+const express_1 = __importDefault(require("express"));
+const prisma_1 = require("../lib/prisma");
+const multer_middleware_1 = require("../middlewares/multer.middleware");
+const fs_1 = __importDefault(require("fs")); // fs modülünü import et
+const path_1 = __importDefault(require("path")); // path modülünü import et
+const router = express_1.default.Router();
+// AYEDAŞ BİLDİRİM İŞLEMLERİ
+// GET: Tüm AYEDAŞ bildirimlerini getir
 router.get('/ayedas/notifications', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        console.log("[AYEDAS API] Bildirimler isteniyor...");
-        const { status } = req.query;
-        let where = { company: "AYEDAŞ" };
-        // Durum filtresi varsa uygula
-        if (status && ["PENDING", "APPROVED", "REJECTED"].includes(status)) {
-            where.status = status;
-        }
-        const notifications = yield prisma.edasNotification.findMany({
-            where,
+        const notifications = yield prisma_1.prisma.edasNotification.findMany({
+            where: { company: "AYEDAŞ" },
             include: {
                 steps: {
-                    include: {
-                        documents: true,
-                    },
+                    orderBy: {
+                        stepType: 'asc'
+                    }
                 },
             },
             orderBy: {
                 createdAt: 'desc',
-            },
+            }
         });
-        console.log(`[AYEDAS API] ${notifications.length} bildirim başarıyla alındı.`);
-        return res.json({
+        console.log(`[AYEDAS API] ${notifications.length} adet AYEDAŞ bildirimi bulundu.`);
+        res.json({
             success: true,
-            data: notifications
+            data: notifications,
         });
     }
     catch (error) {
-        const errorMessage = error.message || "Bilinmeyen hata";
         console.error("[AYEDAS API] Bildirimler getirilirken hata:", error);
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
             message: "Bildirimler getirilirken bir hata oluştu.",
-            error: errorMessage,
-            stack: process.env.NODE_ENV === "development" ? error.stack : undefined
+            error: error.message,
         });
     }
 }));
@@ -378,37 +54,42 @@ router.get('/ayedas/notifications', (req, res) => __awaiter(void 0, void 0, void
 router.get('/ayedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const notification = yield prisma.edasNotification.findUnique({
+        const notification = yield prisma_1.prisma.edasNotification.findUnique({
             where: { id },
             include: {
                 steps: {
-                    include: {
-                        documents: true,
+                    orderBy: {
+                        createdAt: 'asc',
                     },
+                    include: {
+                        documents: true
+                    }
                 },
             },
         });
         if (!notification) {
-            return res.status(404).json({
+            res.status(404).json({
                 success: false,
-                message: `${id} ID'li bildirim bulunamadı.`,
+                message: `${id} ID'li bildirim bulunamadı.`
             });
+            return;
         }
-        // AYEDAŞ kontrolü eklendi
         if (notification.company !== "AYEDAŞ") {
-            return res.status(404).json({
+            res.status(400).json({
                 success: false,
-                message: `${id} ID'li bildirim AYEDAŞ'a ait değil.`, // Daha açıklayıcı mesaj
+                message: `${id} ID'li bildirim AYEDAŞ'a ait değil.`
             });
+            return;
         }
-        return res.json({
+        console.log(`[AYEDAS API] ${id} ID'li AYEDAŞ bildirimi bulundu.`);
+        res.json({
             success: true,
             data: notification,
         });
     }
     catch (error) {
-        console.error("[AYEDAS API] Tek bildirim getirilirken hata:", error); // Hata loglamayı iyileştir
-        return res.status(500).json({
+        console.error(`[AYEDAS API] ${req.params.id} ID'li bildirim getirilirken hata:`, error);
+        res.status(500).json({
             success: false,
             message: "Bildirim getirilirken bir hata oluştu.",
             error: error.message,
@@ -418,69 +99,37 @@ router.get('/ayedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, 
 // POST: Yeni AYEDAŞ bildirimi oluştur
 router.post('/ayedas/notifications', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const body = req.body;
-        // Zorunlu alanları kontrol et
-        const requiredFields = ["refNo", "customerName", "applicationType"];
-        const missingFields = requiredFields.filter(field => !body[field]);
-        if (missingFields.length > 0) {
-            return res.status(400).json({
-                success: false,
-                message: `Zorunlu alanlar eksik: ${missingFields.join(", ")}`
-            });
-        }
-        // Referans numarasının benzersiz olup olmadığını kontrol et
-        const existingNotification = yield prisma.edasNotification.findUnique({
-            where: { refNo: body.refNo },
-        });
-        if (existingNotification) {
-            return res.status(400).json({
-                success: false,
-                message: `Bu referans numarası (${body.refNo}) ile zaten bir bildirim mevcut.`
-            });
-        }
-        // Yeni bildirim oluştur (İlk adımı da ekle)
-        const newNotification = yield prisma.edasNotification.create({
+        const data = req.body;
+        data.company = "AYEDAŞ"; // Şirketi AYEDAŞ olarak ayarla
+        console.log("[AYEDAS API] Yeni AYEDAŞ bildirimi oluşturuluyor, veri:", data);
+        const newNotification = yield prisma_1.prisma.edasNotification.create({
             data: {
-                refNo: body.refNo,
-                projectName: body.projectName || null,
-                applicationType: body.applicationType,
-                customerName: body.customerName,
-                city: body.city || null,
-                district: body.district || null,
-                parcelBlock: body.parcelBlock || null,
-                parcelNo: body.parcelNo || null,
-                company: "AYEDAŞ",
-                status: "PENDING",
-                currentStep: "IC_TESISAT_PROJESI", // AYEDAŞ için ilk adım
-                notes: body.notes || null,
-                steps: {
-                    create: [
-                        {
-                            stepType: "IC_TESISAT_PROJESI", // AYEDAŞ için ilk adım
-                            status: "PENDING",
-                            refNo: body.refNo + "-ITP", // Örnek ref no
-                            startDate: new Date(),
-                        }
-                    ]
-                }
-            },
-            include: {
-                steps: true,
+                company: data.company,
+                refNo: data.refNo,
+                applicationType: data.applicationType,
+                status: 'PENDING',
+                currentStep: "IC_TESISAT_PROJESI",
+                projectName: data.projectName,
+                customerName: data.customerName,
+                city: data.city,
+                district: data.district,
+                parcelBlock: data.parcelBlock,
+                parcelNo: data.parcelNo,
             },
         });
-        return res.status(201).json({
+        console.log(`[AYEDAS API] Yeni AYEDAŞ bildirimi başarıyla oluşturuldu: ${newNotification.id}`);
+        res.status(201).json({
             success: true,
             data: newNotification,
-            message: "Bildirim başarıyla oluşturuldu."
+            message: "AYEDAŞ bildirimi başarıyla oluşturuldu."
         });
     }
     catch (error) {
-        console.error("[AYEDAS API] Bildirim oluşturulurken hata:", error);
-        return res.status(500).json({
+        console.error("[AYEDAS API] Yeni bildirim oluşturulurken hata:", error);
+        res.status(500).json({
             success: false,
             message: "Bildirim oluşturulurken bir hata oluştu.",
             error: error.message,
-            stack: process.env.NODE_ENV === "development" ? error.stack : undefined
         });
     }
 }));
@@ -488,47 +137,32 @@ router.post('/ayedas/notifications', (req, res) => __awaiter(void 0, void 0, voi
 router.put('/ayedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const body = req.body;
-        // Bildirim var mı kontrol et
-        const existingNotification = yield prisma.edasNotification.findUnique({
+        const data = req.body;
+        console.log(`[AYEDAS API] ${id} ID'li AYEDAŞ bildirimi güncelleniyor, veri:`, data);
+        // Şirket adı değiştirilemez
+        delete data.company;
+        const updatedNotification = yield prisma_1.prisma.edasNotification.update({
             where: { id },
+            data: data,
         });
-        if (!existingNotification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`,
-            });
-        }
-        // Bildirim güncelle
-        const updatedNotification = yield prisma.edasNotification.update({
-            where: { id },
-            data: {
-                projectName: body.projectName !== undefined ? body.projectName : existingNotification.projectName,
-                customerName: body.customerName || existingNotification.customerName,
-                city: body.city !== undefined ? body.city : existingNotification.city,
-                district: body.district !== undefined ? body.district : existingNotification.district,
-                parcelBlock: body.parcelBlock !== undefined ? body.parcelBlock : existingNotification.parcelBlock,
-                parcelNo: body.parcelNo !== undefined ? body.parcelNo : existingNotification.parcelNo,
-                status: body.status || existingNotification.status,
-                currentStep: body.currentStep || existingNotification.currentStep,
-                notes: body.notes !== undefined ? body.notes : existingNotification.notes,
-            },
-            include: {
-                steps: {
-                    include: {
-                        documents: true,
-                    },
-                },
-            },
-        });
-        return res.json({
+        console.log(`[AYEDAS API] ${id} ID'li AYEDAŞ bildirimi başarıyla güncellendi.`);
+        res.json({
             success: true,
             data: updatedNotification,
-            message: "Bildirim başarıyla güncellendi."
+            message: "AYEDAŞ bildirimi başarıyla güncellendi."
         });
     }
     catch (error) {
-        return res.status(500).json({
+        console.error(`[AYEDAS API] ${req.params.id} ID'li bildirim güncellenirken hata:`, error);
+        // Prisma'nın özel hata kodlarını kontrol et (örn: P2025 - Kayıt bulunamadı)
+        if (error.code === 'P2025') {
+            res.status(404).json({
+                success: false,
+                message: `${req.params.id} ID'li bildirim bulunamadı.`,
+            });
+            return;
+        }
+        res.status(500).json({
             success: false,
             message: "Bildirim güncellenirken bir hata oluştu.",
             error: error.message,
@@ -539,433 +173,260 @@ router.put('/ayedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, 
 router.delete('/ayedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        // Bildirim var mı kontrol et
-        const existingNotification = yield prisma.edasNotification.findUnique({
+        console.log(`[AYEDAS API] ${id} ID'li AYEDAŞ bildirimi siliniyor...`);
+        // Önce ilişkili adımları ve belgeleri silmek gerekebilir (Cascade delete ayarlanmadıysa)
+        // await prisma.edasNotificationDocument.deleteMany({ where: { step: { notificationId: id } } });
+        // await prisma.edasNotificationStep.deleteMany({ where: { notificationId: id } });
+        yield prisma_1.prisma.edasNotification.delete({
             where: { id },
         });
-        if (!existingNotification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`,
-            });
-        }
-        // Cascade silinme sayesinde adımlar ve belgeler de silinecek
-        yield prisma.edasNotification.delete({
-            where: { id },
-        });
-        return res.json({
-            success: true,
-            message: "Bildirim başarıyla silindi."
-        });
+        console.log(`[AYEDAS API] ${id} ID'li AYEDAŞ bildirimi başarıyla silindi.`);
+        res.json({ success: true, message: "Bildirim başarıyla silindi." });
     }
     catch (error) {
-        return res.status(500).json({
+        console.error(`[AYEDAS API] ${req.params.id} ID'li bildirim silinirken hata:`, error);
+        if (error.code === 'P2025') {
+            res.status(404).json({
+                success: false,
+                message: `${req.params.id} ID'li bildirim bulunamadı.`,
+            });
+            return;
+        }
+        res.status(500).json({
             success: false,
             message: "Bildirim silinirken bir hata oluştu.",
             error: error.message,
         });
     }
 }));
-// ADIMLAR (STEPS) İÇİN API ROUTE'LARI
-// POST: BEDAŞ bildirimine yeni adım ekle
-router.post('/bedas/notifications/:id/steps', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// AYEDAŞ BİLDİRİM ADIMLARI
+// POST: AYEDAŞ bildirimine yeni adım ekle veya güncelle
+router.post('/ayedas/notifications/:notificationId/steps', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { id } = req.params;
-        const body = req.body;
+        const { notificationId } = req.params;
+        const { stepType, status, notes } = req.body;
+        console.log(`[AYEDAS API] Bildirim ${notificationId}, Adım ${stepType}, Durum ${status}`);
         // Bildirim var mı kontrol et
-        const notification = yield prisma.edasNotification.findUnique({
-            where: { id },
+        const notification = yield prisma_1.prisma.edasNotification.findUnique({
+            where: { id: notificationId }
         });
         if (!notification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`,
-            });
+            res.status(404).json({ success: false, message: 'Bildirim bulunamadı.' });
+            return;
         }
-        // Yeni adım oluştur
-        const newStep = yield prisma.edasNotificationStep.create({
-            data: {
-                notificationId: id,
-                stepType: body.stepType,
-                status: body.status || "PENDING",
-                refNo: body.refNo || `${notification.refNo}-${body.stepType.substring(0, 2)}`,
-                startDate: body.startDate || new Date(),
-                completionDate: body.completionDate || null,
-                notes: body.notes || null,
-            },
-        });
-        return res.status(201).json({
-            success: true,
-            data: newStep,
-            message: "Adım başarıyla eklendi."
-        });
-    }
-    catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Adım eklenirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// PUT: BEDAŞ bildiriminin adımını güncelle
-router.put('/bedas/notifications/:notificationId/steps/:stepId/old', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { notificationId, stepId } = req.params;
-        const body = req.body;
-        // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
+        // Adım zaten var mı kontrol et
+        let step = yield prisma_1.prisma.edasNotificationStep.findFirst({
             where: {
-                id: stepId,
                 notificationId: notificationId,
+                stepType: stepType,
             },
         });
-        if (!step) {
-            return res.status(404).json({
-                success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
+        let resultData;
+        let statusCode = 200;
+        let messageAction = 'güncellendi';
+        if (step) {
+            // Adım varsa güncelle
+            console.log(`[AYEDAS API] Adım ${stepType} güncelleniyor.`);
+            step = yield prisma_1.prisma.edasNotificationStep.update({
+                where: { id: step.id },
+                data: { status, notes },
             });
+            resultData = { step, notification };
         }
-        // Adımı güncelle
-        const updatedStep = yield prisma.edasNotificationStep.update({
-            where: { id: stepId },
-            data: {
-                status: body.status || step.status,
-                refNo: body.refNo || step.refNo,
-                startDate: body.startDate || step.startDate,
-                completionDate: body.completionDate !== undefined ? body.completionDate : step.completionDate,
-                notes: body.notes !== undefined ? body.notes : step.notes,
-            },
-            include: {
-                documents: true,
-            },
-        });
-        // Eğer tüm adımlar tamamlandıysa bildirimin durumunu güncelle
-        if (body.status === "APPROVED") {
-            const allSteps = yield prisma.edasNotificationStep.findMany({
-                where: { notificationId: notificationId },
+        else {
+            // Adım yoksa oluştur
+            console.log(`[AYEDAS API] Adım ${stepType} oluşturuluyor.`);
+            statusCode = 201;
+            messageAction = 'oluşturuldu';
+            step = yield prisma_1.prisma.edasNotificationStep.create({
+                data: {
+                    notificationId: notificationId,
+                    stepType: stepType,
+                    status: status,
+                    notes: notes,
+                },
             });
-            const allApproved = allSteps.every(s => s.status === "APPROVED");
-            if (allApproved) {
-                yield prisma.edasNotification.update({
-                    where: { id: notificationId },
-                    data: { status: "APPROVED" },
-                });
-            }
+            resultData = { step, notification };
         }
-        return res.json({
+        res.status(statusCode).json({
             success: true,
-            data: updatedStep,
-            message: "Adım başarıyla güncellendi."
+            data: resultData,
+            message: `Adım ${stepType} başarıyla ${messageAction}.`
         });
     }
     catch (error) {
-        return res.status(500).json({
+        console.error("[AYEDAS API] Adım işlenirken hata:", error);
+        res.status(500).json({
             success: false,
-            message: "Adım güncellenirken bir hata oluştu.",
+            message: "Adım işlenirken bir hata oluştu.",
             error: error.message,
         });
     }
 }));
-// DELETE: BEDAŞ bildiriminin adımını sil
-router.delete('/bedas/notifications/:notificationId/steps/:stepId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { notificationId, stepId } = req.params;
-        // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
-            where: {
-                id: stepId,
-                notificationId: notificationId,
-            },
-        });
-        if (!step) {
-            return res.status(404).json({
-                success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
-            });
-        }
-        // Adımı sil (Cascade silme ile belgeler de silinecek)
-        yield prisma.edasNotificationStep.delete({
-            where: { id: stepId },
-        });
-        return res.json({
-            success: true,
-            message: "Adım başarıyla silindi."
-        });
-    }
-    catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Adım silinirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// POST: AYEDAŞ bildirimine yeni adım ekle (Yeni Eklendi)
-router.post('/ayedas/notifications/:id/steps', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params; // notificationId
-        const body = req.body; // { stepType, status?, refNo?, startDate?, completionDate?, notes? }
-        // Bildirim var mı ve AYEDAŞ mı kontrol et
-        const notification = yield prisma.edasNotification.findFirst({
-            where: { id: id, company: "AYEDAŞ" },
-        });
-        if (!notification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li AYEDAŞ bildirimi bulunamadı.`,
-            });
-        }
-        // Gelen stepType geçerli mi kontrol et (isteğe bağlı)
-        // if (!Object.values(AyedasNotificationType).includes(body.stepType)) { ... }
-        // Bu adım zaten var mı kontrol et
-        const existingStep = yield prisma.edasNotificationStep.findFirst({
-            where: {
-                notificationId: id,
-                stepType: body.stepType,
-            },
-        });
-        if (existingStep) {
-            return res.status(400).json({
-                success: false,
-                message: `Bu bildirimde ${body.stepType} adımı zaten mevcut. Güncelleme için PUT kullanın.`,
-            });
-        }
-        // Yeni adım oluştur
-        const newStep = yield prisma.edasNotificationStep.create({
-            data: {
-                notificationId: id,
-                stepType: body.stepType,
-                status: body.status || "PENDING",
-                refNo: body.refNo || `${notification.refNo}-${body.stepType.substring(0, 3)}`,
-                startDate: body.startDate ? new Date(body.startDate) : new Date(),
-                completionDate: body.completionDate ? new Date(body.completionDate) : null,
-                notes: body.notes || null,
-            },
-            include: {
-                documents: true, // Belgeleri de döndür
-            }
-        });
-        return res.status(201).json({
-            success: true,
-            data: newStep,
-            message: "Adım başarıyla eklendi."
-        });
-    }
-    catch (error) {
-        console.error("[AYEDAS API] Adım eklenirken hata:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Adım eklenirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// PUT: AYEDAŞ bildiriminin adımını güncelle
+// PUT: AYEDAŞ adım durumu güncelleme (POST endpoint'i ile birleştirildiği için bu gereksiz olabilir)
 router.put('/ayedas/notifications/:notificationId/steps/:stepId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { notificationId, stepId } = req.params;
-        const body = req.body;
+        const { status, notes } = req.body;
+        console.log(`[AYEDAS API] Step Update Request: notificationId=${notificationId}, stepId=${stepId}, status=${status}`);
         // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
+        const step = yield prisma_1.prisma.edasNotificationStep.findFirst({
             where: {
                 id: stepId,
-                notificationId: notificationId,
-            },
+                notificationId: notificationId
+            }
         });
         if (!step) {
-            return res.status(404).json({
+            console.log(`[AYEDAS API] Step not found: ${stepId}`);
+            res.status(404).json({
                 success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
+                message: `${stepId} ID'li adım bulunamadı.`
             });
+            return;
         }
         // Adımı güncelle
-        const updatedStep = yield prisma.edasNotificationStep.update({
+        const updatedStep = yield prisma_1.prisma.edasNotificationStep.update({
             where: { id: stepId },
-            data: {
-                status: body.status || step.status,
-                refNo: body.refNo || step.refNo,
-                startDate: body.startDate || step.startDate,
-                completionDate: body.completionDate !== undefined ? body.completionDate : step.completionDate,
-                notes: body.notes !== undefined ? body.notes : step.notes,
-            },
+            data: { status, notes },
             include: {
-                documents: true,
-            },
-        });
-        // Eğer tüm adımlar tamamlandıysa bildirimin durumunu güncelle
-        if (body.status === "APPROVED") {
-            const allSteps = yield prisma.edasNotificationStep.findMany({
-                where: { notificationId: notificationId },
-            });
-            const allApproved = allSteps.every(s => s.status === "APPROVED");
-            if (allApproved) {
-                yield prisma.edasNotification.update({
-                    where: { id: notificationId },
-                    data: { status: "APPROVED" },
-                });
+                notification: true
             }
-        }
-        return res.json({
+        });
+        console.log(`[AYEDAS API] Step ${stepId} updated successfully.`);
+        res.json({
             success: true,
-            data: updatedStep,
-            message: "Adım başarıyla güncellendi."
+            data: { step: updatedStep, notification: updatedStep.notification }, // Frontend'in beklediği yapıya uygun döndür
+            message: "Adım durumu başarıyla güncellendi."
         });
     }
     catch (error) {
-        return res.status(500).json({
+        console.error("[AYEDAS API] Adım güncellenirken hata:", error);
+        if (error.code === 'P2025') {
+            res.status(404).json({ success: false, message: 'Güncellenecek adım bulunamadı.' });
+            return;
+        }
+        res.status(500).json({
             success: false,
             message: "Adım güncellenirken bir hata oluştu.",
             error: error.message,
         });
     }
 }));
-// DELETE: AYEDAŞ bildiriminin adımını sil
-router.delete('/ayedas/notifications/:notificationId/steps/:stepId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// AYEDAŞ BİLDİRİM BELGELERİ
+// GET: AYEDAŞ bildiriminin adımına ait belgeleri getir
+router.get('/ayedas/notifications/:notificationId/steps/:stepId/documents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { notificationId, stepId } = req.params;
-        // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
+        const documents = yield prisma_1.prisma.edasNotificationDocument.findMany({
             where: {
-                id: stepId,
-                notificationId: notificationId,
-            },
-        });
-        if (!step) {
-            return res.status(404).json({
-                success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
-            });
-        }
-        // Adımı sil (Cascade silme ile belgeler de silinecek)
-        yield prisma.edasNotificationStep.delete({
-            where: { id: stepId },
-        });
-        return res.json({
-            success: true,
-            message: "Adım başarıyla silindi."
-        });
-    }
-    catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Adım silinirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// BELGELER (DOCUMENTS) İÇİN API ROUTE'LARI
-// POST: BEDAŞ bildiriminin adımına belge ekle (eski)
-router.post('/bedas/notifications/:notificationId/steps/:stepId/documents/old', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { notificationId, stepId } = req.params;
-        const body = req.body;
-        // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
-            where: {
-                id: stepId,
-                notificationId: notificationId,
-            },
-        });
-        if (!step) {
-            return res.status(404).json({
-                success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
-            });
-        }
-        // Belge oluştur
-        const newDocument = yield prisma.edasNotificationDocument.create({
-            data: {
                 stepId: stepId,
-                fileUrl: body.fileUrl,
-                fileName: body.fileName,
-                fileType: body.fileType,
-                fileSize: body.fileSize,
+                step: {
+                    notificationId: notificationId,
+                },
             },
         });
-        return res.status(201).json({
-            success: true,
-            data: newDocument,
-            message: "Belge başarıyla eklendi."
-        });
+        res.json({ success: true, data: documents });
     }
     catch (error) {
-        return res.status(500).json({
+        res.status(500).json({
             success: false,
-            message: "Belge eklenirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// DELETE: BEDAŞ bildirimi belgesini sil
-router.delete('/bedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { documentId } = req.params;
-        // Belge var mı kontrol et
-        const document = yield prisma.edasNotificationDocument.findUnique({
-            where: { id: documentId },
-        });
-        if (!document) {
-            return res.status(404).json({
-                success: false,
-                message: `${documentId} ID'li belge bulunamadı.`,
-            });
-        }
-        // Belgeyi sil
-        yield prisma.edasNotificationDocument.delete({
-            where: { id: documentId },
-        });
-        return res.json({
-            success: true,
-            message: "Belge başarıyla silindi."
-        });
-    }
-    catch (error) {
-        return res.status(500).json({
-            success: false,
-            message: "Belge silinirken bir hata oluştu.",
+            message: "Belgeler getirilirken bir hata oluştu.",
             error: error.message,
         });
     }
 }));
 // POST: AYEDAŞ bildiriminin adımına belge ekle
-router.post('/ayedas/notifications/:notificationId/steps/:stepId/documents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/ayedas/notifications/:notificationId/steps/:stepId/documents', multer_middleware_1.upload.single('file'), // Multer middleware'ini ekle
+(req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { notificationId, stepId } = req.params;
-        const body = req.body;
-        // Adım var mı kontrol et
-        const step = yield prisma.edasNotificationStep.findFirst({
+        const file = req.file; // Yüklenen dosya bilgisi
+        const body = req.body; // Metin alanları
+        if (!file) {
+            res.status(400).json({ success: false, message: 'Dosya yüklenmedi.' });
+            return;
+        }
+        // Adım var mı ve AYEDAŞ'a mı ait kontrol et
+        const step = yield prisma_1.prisma.edasNotificationStep.findFirst({
             where: {
                 id: stepId,
                 notificationId: notificationId,
+                notification: {
+                    company: "AYEDAŞ"
+                }
             },
         });
         if (!step) {
-            return res.status(404).json({
+            // Geçici dosya oluştuysa sil
+            try {
+                if (fs_1.default.existsSync(file.path)) {
+                    fs_1.default.unlinkSync(file.path);
+                }
+            }
+            catch (unlinkError) {
+                console.error("Dosya silinirken hata oluştu:", unlinkError);
+            }
+            res.status(404).json({
                 success: false,
-                message: `${stepId} ID'li adım bulunamadı.`,
+                message: `${stepId} ID'li AYEDAŞ adımı bulunamadı.`,
             });
+            return;
+        }
+        // fileUrl'yi backend'de oluştur
+        const generatedFileUrl = `/uploads/edas-documents/${file.filename}`;
+        console.log("[AYEDAS Upload] Received file:", file);
+        console.log("[AYEDAS Upload] Received body:", body);
+        // Veritabanına kaydedilecek veriyi hazırla
+        const documentData = {
+            stepId: stepId,
+            fileUrl: generatedFileUrl, // Backend'de oluşturulan URL
+            originalName: file.originalname, // Orijinal dosya adını sakla
+            fileName: file.filename, // Multer tarafından üretilen dosya adını sakla
+            fileType: file.mimetype,
+            fileSize: file.size,
+        };
+        console.log("[AYEDAS Upload] Data for Prisma:", documentData);
+        // Alanların undefined/null olmadığını kontrol et (fileSize için NaN kontrolü)
+        if (!documentData.stepId || !documentData.fileUrl || !documentData.originalName || !documentData.fileName || !documentData.fileType || isNaN(documentData.fileSize)) {
+            console.error("[AYEDAS Upload] Prisma'ya gönderilmeden önce eksik/geçersiz alanlar:", documentData);
+            // Geçici dosya oluştuysa sil
+            try {
+                if (fs_1.default.existsSync(file.path)) {
+                    fs_1.default.unlinkSync(file.path);
+                }
+            }
+            catch (unlinkError) {
+                console.error("Dosya silinirken hata oluştu:", unlinkError);
+            }
+            res.status(400).json({ success: false, message: 'Eksik veya geçersiz belge bilgileri.' });
+            return;
         }
         // Belge oluştur
-        const newDocument = yield prisma.edasNotificationDocument.create({
-            data: {
-                stepId: stepId,
-                fileUrl: body.fileUrl,
-                fileName: body.fileName,
-                fileType: body.fileType,
-                fileSize: body.fileSize,
-            },
+        const newDocument = yield prisma_1.prisma.edasNotificationDocument.create({
+            data: documentData,
         });
-        return res.status(201).json({
+        res.status(201).json({
             success: true,
             data: newDocument,
             message: "Belge başarıyla eklendi."
         });
     }
     catch (error) {
-        return res.status(500).json({
+        console.error("[AYEDAS Upload] Belge eklenirken hata:", error);
+        // Hata durumunda yüklenen dosyayı sil
+        if (req.file) {
+            try {
+                if (fs_1.default.existsSync(req.file.path)) {
+                    fs_1.default.unlinkSync(req.file.path);
+                }
+            }
+            catch (unlinkError) {
+                console.error("Hata durumunda dosya silinirken hata oluştu:", unlinkError);
+            }
+        }
+        res.status(500).json({
             success: false,
-            message: "Belge eklenirken bir hata oluştu.",
+            message: "Belge eklenirken bir sunucu hatası oluştu.",
             error: error.message,
         });
     }
@@ -973,51 +434,10 @@ router.post('/ayedas/notifications/:notificationId/steps/:stepId/documents', (re
 // DELETE: AYEDAŞ bildirimi belgesini sil
 router.delete('/ayedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { notificationId, stepId, documentId } = req.params; // Parametreleri al
-        // Belge var mı ve doğru adıma/bildirime mi ait kontrol et (opsiyonel ama önerilir)
-        const document = yield prisma.edasNotificationDocument.findFirst({
-            where: {
-                id: documentId,
-                step: {
-                    id: stepId,
-                    notificationId: notificationId,
-                    notification: {
-                        company: "AYEDAŞ" // AYEDAŞ kontrolü
-                    }
-                }
-            }
-        });
-        if (!document) {
-            return res.status(404).json({
-                success: false,
-                message: `${documentId} ID'li belge bulunamadı veya belirtilen AYEDAŞ bildirim/adımına ait değil.`,
-            });
-        }
-        // Belgeyi sil
-        yield prisma.edasNotificationDocument.delete({
-            where: { id: documentId },
-        });
-        // TODO: Gerçek senaryoda, dosya sisteminden veya bulut depolamadan da belgeyi silmek gerekebilir.
-        // Örnek: fs.unlinkSync(document.fileUrl);
-        return res.json({
-            success: true,
-            message: "Belge başarıyla silindi."
-        });
-    }
-    catch (error) {
-        console.error("[AYEDAS API] Belge silinirken hata:", error); // Hata loglamayı iyileştir
-        return res.status(500).json({
-            success: false,
-            message: "Belge silinirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// GET: AYEDAŞ bildirimi belgesini indir (Yeni Eklendi)
-router.get('/ayedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
         const { notificationId, stepId, documentId } = req.params;
-        const document = yield prisma.edasNotificationDocument.findFirst({
+        console.log(`[AYEDAS Delete] Deleting document: ${documentId} for step ${stepId} of notification ${notificationId}`);
+        // Belge var mı ve doğru AYEDAŞ adımına/bildirimine mi ait kontrol et
+        const document = yield prisma_1.prisma.edasNotificationDocument.findFirst({
             where: {
                 id: documentId,
                 step: {
@@ -1030,660 +450,656 @@ router.get('/ayedas/notifications/:notificationId/steps/:stepId/documents/:docum
             }
         });
         if (!document) {
-            return res.status(404).json({
+            console.log(`[AYEDAS Delete] Document not found or invalid context: ${documentId}`);
+            res.status(404).json({
                 success: false,
                 message: `${documentId} ID'li belge bulunamadı veya belirtilen AYEDAŞ bildirim/adımına ait değil.`,
             });
+            return;
         }
-        // --- Gerçek Dosya İndirme Mantığı ---
-        // Bu kısım, dosyaların nasıl saklandığına bağlı olarak değişir.
-        // Eğer dosyalar doğrudan erişilebilir bir URL'de ise (örn: S3, public folder):
-        // return res.redirect(document.fileUrl);
-        // Eğer dosyalar backend'in erişebileceği bir yerde ise:
-        // const filePath = path.join(__dirname, '..', '..', document.fileUrl); // Örnek dosya yolu
-        // if (fs.existsSync(filePath)) {
-        //   res.setHeader('Content-Disposition', `attachment; filename=${document.fileName}`); // İndirme başlığını ayarla
-        //   res.setHeader('Content-Type', document.fileType); // MIME türünü ayarla
-        //   return res.sendFile(filePath);
-        // } else {
-        //   return res.status(404).json({ success: false, message: 'Dosya bulunamadı.' });
-        // }
-        // Şimdilik, dosya indirme yerine sadece belge bilgilerini döndürelim (test amaçlı)
-        console.warn(`[AYEDAS API] Belge indirme simülasyonu: ${document.fileName} (ID: ${documentId})`);
-        return res.json({
-            success: true,
-            message: "İndirme simülasyonu başarılı. Gerçek implementasyon gerekiyor.",
-            data: document // Frontend'in test edebilmesi için belge verisini döndür
-        });
-    }
-    catch (error) {
-        console.error("[AYEDAS API] Belge indirilirken hata:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Belge indirilirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// ADIM İŞLEMLERİ - EKSIK API'LER
-// PUT: BEDAŞ adım durumu güncelleme
-router.put('/bedas/notifications/:id/steps/:stepType', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id, stepType } = req.params;
-        const { status, notes } = req.body;
-        console.log(`[BEDAS API] ${id} ID'li bildirimin ${stepType} adımı durumu güncelleniyor. Yeni durum: ${status}`);
-        if (!['PENDING', 'APPROVED', 'REJECTED'].includes(status)) {
-            return res.status(400).json({
-                success: false,
-                message: "Geçersiz durum değeri. PENDING, APPROVED veya REJECTED olmalıdır."
-            });
-        }
-        // Bildirimi kontrol et
-        const notification = yield prisma.edasNotification.findUnique({
-            where: { id },
-            include: {
-                steps: true,
-            },
-        });
-        if (!notification) {
-            console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`
-            });
-        }
-        if (notification.company !== "BEDAŞ") {
-            console.log(`[BEDAS API] ${id} ID'li bildirim BEDAŞ'a ait değil.`);
-            return res.status(400).json({
-                success: false,
-                message: `${id} ID'li bildirim BEDAŞ'a ait değil.`
-            });
-        }
-        // İlgili adımı bul
-        const step = notification.steps.find(s => s.stepType === stepType);
-        if (!step) {
-            console.log(`[BEDAS API] ${stepType} adımı bulunamadı, oluşturuluyor...`);
-            // Adım yoksa oluştur
-            const newStep = yield prisma.edasNotificationStep.create({
-                data: {
-                    notificationId: id,
-                    stepType,
-                    status,
-                    notes: notes || null,
-                    startDate: new Date(),
-                    refNo: `${notification.refNo}-${stepType.substring(0, 3)}`,
-                },
-            });
-            console.log(`[BEDAS API] Yeni adım oluşturuldu. ID: ${newStep.id}, Durum: ${status}`);
-            return res.json({
-                success: true,
-                data: {
-                    step: newStep,
-                    notificationStatus: notification.status, // Bildirimin genel durumu değişmedi
-                    currentStep: notification.currentStep, // Mevcut adım değişmedi
-                },
-                message: "Adım başarıyla oluşturuldu ve durumu ayarlandı."
-            });
-        }
-        console.log(`[BEDAS API] ${step.id} ID'li adım bulundu. Mevcut durum: ${step.status}, Yeni durum: ${status}`);
-        // Adımı güncelle
-        const updatedStep = yield prisma.edasNotificationStep.update({
-            where: { id: step.id },
-            data: {
-                status,
-                notes: notes !== undefined ? notes : step.notes,
-                completionDate: status === 'APPROVED' || status === 'REJECTED' ? new Date() : step.completionDate,
-            },
-        });
-        console.log(`[BEDAS API] Adım başarıyla güncellendi. ID: ${updatedStep.id}, Durum: ${updatedStep.status}`);
-        // Bildirimin genel durumunu ve mevcut adımını güncelleme
-        let notificationStatus = notification.status;
-        let currentStep = notification.currentStep;
-        // Adım onaylandıysa, sonraki adıma geç
-        if (status === 'APPROVED' && stepType === notification.currentStep) {
-            const stepOrder = [
-                "PROJE",
-                "BAGLANTI_GORUSU",
-                "DAGITIM_BAGLANTI_ANLASMASI",
-                "TESISIN_TAMAMLANMASI",
-                "FEN_MUAYENE"
-            ];
-            const currentIndex = stepOrder.indexOf(stepType);
-            if (currentIndex !== -1 && currentIndex < stepOrder.length - 1) {
-                currentStep = stepOrder[currentIndex + 1];
-                console.log(`[BEDAS API] Bir sonraki adıma geçiliyor: ${currentStep}`);
-            }
-            // Son adım onaylandıysa, tüm bildirimi onayla
-            if (currentIndex === stepOrder.length - 1) {
-                notificationStatus = 'APPROVED';
-                console.log(`[BEDAS API] Son adım onaylandı, bildirim durumu APPROVED olarak değiştiriliyor.`);
-            }
-            // Bildirimi güncelle
-            yield prisma.edasNotification.update({
-                where: { id },
-                data: {
-                    status: notificationStatus,
-                    currentStep,
-                },
-            });
-            console.log(`[BEDAS API] Bildirim güncellendi. Durum: ${notificationStatus}, Mevcut Adım: ${currentStep}`);
-        }
-        // Adım reddedildiyse, bildirimi de reddet
-        if (status === 'REJECTED') {
-            notificationStatus = 'REJECTED';
-            yield prisma.edasNotification.update({
-                where: { id },
-                data: {
-                    status: notificationStatus,
-                },
-            });
-            console.log(`[BEDAS API] Adım reddedildi, bildirim durumu REJECTED olarak değiştiriliyor.`);
-        }
-        return res.json({
-            success: true,
-            data: {
-                step: updatedStep,
-                notificationStatus,
-                currentStep,
-            },
-            message: "Adım durumu başarıyla güncellendi."
-        });
-    }
-    catch (error) {
-        console.error("[BEDAS API] Adım durumu güncellenirken hata:", error);
-        console.error("[BEDAS API] Hata detayı:", error.message);
-        console.error("[BEDAS API] Hata stack:", error.stack);
-        if (error.code)
-            console.error("[BEDAS API] Hata kodu:", error.code);
-        return res.status(500).json({
-            success: false,
-            message: "Adım durumu güncellenirken bir hata oluştu.",
-            error: error.message,
-            errorCode: error.code,
-            stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-        });
-    }
-}));
-// PUT: Adım referans numarasını güncelleme
-router.put('/bedas/notifications/:id/steps/:stepType/ref-no', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id, stepType } = req.params;
-        const { refNo } = req.body;
-        if (!refNo || typeof refNo !== 'string') {
-            return res.status(400).json({
-                success: false,
-                message: "Geçerli bir referans numarası gereklidir."
-            });
-        }
-        // Bildirimi kontrol et
-        const notification = yield prisma.edasNotification.findUnique({
-            where: { id },
-            include: {
-                steps: true,
-            },
-        });
-        if (!notification) {
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`
-            });
-        }
-        // İlgili adımı bul
-        const step = notification.steps.find(s => s.stepType === stepType);
-        if (!step) {
-            // Adım yoksa oluştur
-            const newStep = yield prisma.edasNotificationStep.create({
-                data: {
-                    notificationId: id,
-                    stepType,
-                    status: 'PENDING',
-                    refNo,
-                    startDate: new Date(),
-                },
-            });
-            return res.json({
-                success: true,
-                data: newStep,
-                message: "Adım başarıyla oluşturuldu ve referans numarası ayarlandı."
-            });
-        }
-        // Adımı güncelle
-        const updatedStep = yield prisma.edasNotificationStep.update({
-            where: { id: step.id },
-            data: {
-                refNo,
-            },
-        });
-        return res.json({
-            success: true,
-            data: updatedStep,
-            message: "Adım referans numarası başarıyla güncellendi."
-        });
-    }
-    catch (error) {
-        console.error("Referans numarası güncellenirken hata:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Referans numarası güncellenirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// POST: Adıma belge yükleme
-router.post('/bedas/notifications/:id/steps/:stepType/documents', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id, stepType } = req.params;
-        console.log(`[BEDAS API] ${id} ID'li bildirimin ${stepType} adımına belge yükleme isteği alındı`);
-        // Multipart form-data kontrolü
-        if (!req.files || Object.keys(req.files).length === 0) {
-            return res.status(400).json({
-                success: false,
-                message: "Yüklenecek dosya bulunamadı."
-            });
-        }
-        // Belge türü kontrolü
-        if (!req.body.documentType) {
-            return res.status(400).json({
-                success: false,
-                message: "Belge türü belirtilmelidir."
-            });
-        }
-        console.log(`[BEDAS API] Yüklenecek dosya sayısı:`, req.files.files ? (Array.isArray(req.files.files) ? req.files.files.length : 1) : 0);
-        console.log(`[BEDAS API] Belge türü: ${req.body.documentType}`);
-        // Bildirimi kontrol et
-        const notification = yield prisma.edasNotification.findUnique({
-            where: { id },
-            include: {
-                steps: true,
-            },
-        });
-        if (!notification) {
-            console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-            return res.status(404).json({
-                success: false,
-                message: `${id} ID'li bildirim bulunamadı.`
-            });
-        }
-        // İlgili adımı bul veya oluştur
-        let step = notification.steps.find(s => s.stepType === stepType);
-        if (!step) {
-            console.log(`[BEDAS API] ${stepType} adımı bulunamadı, oluşturuluyor...`);
-            step = yield prisma.edasNotificationStep.create({
-                data: {
-                    notificationId: id,
-                    stepType,
-                    status: 'PENDING',
-                    refNo: `${notification.refNo}-${stepType.substring(0, 3)}`,
-                    startDate: new Date(),
-                },
-            });
-        }
-        // Dosyaları işle ve veritabanına kaydet
-        const uploadPath = `uploads/bedas/${id}/${stepType}`;
-        let files = req.files.files;
-        // Tekil dosya için array dönüşümü yap
-        if (!Array.isArray(files)) {
-            files = [files];
-        }
-        const documentType = req.body.documentType;
-        const savedDocuments = [];
-        console.log(`[BEDAS API] ${files.length} dosya işlenecek, yükleme klasörü: ${uploadPath}`);
-        // Yükleme klasörünü oluştur
+        // Dosya sisteminden belgeyi sil
+        const filePath = path_1.default.join(__dirname, '..', '..', document.fileUrl); // Proje kök dizinine göre ayarla
         try {
-            yield fs_1.default.promises.mkdir(uploadPath, { recursive: true });
-            console.log(`[BEDAS API] Klasör oluşturuldu: ${uploadPath}`);
-        }
-        catch (err) {
-            console.error(`[BEDAS API] Klasör oluşturma hatası:`, err);
-        }
-        for (const file of files) {
-            try {
-                const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-                const filePath = `${uploadPath}/${fileName}`;
-                // Dosyayı yükle
-                yield file.mv(filePath);
-                console.log(`[BEDAS API] Dosya başarıyla yüklendi: ${filePath}`);
-                // Veritabanına belge kaydı ekle
-                const savedDocument = yield prisma.edasNotificationDocument.create({
-                    data: {
-                        stepId: step.id,
-                        fileUrl: filePath,
-                        fileName: `${documentType} - ${file.name}`,
-                        fileType: file.mimetype,
-                        fileSize: file.size,
-                    },
-                });
-                savedDocuments.push(savedDocument);
-                console.log(`[BEDAS API] Belge kaydı oluşturuldu, ID: ${savedDocument.id}`);
+            if (fs_1.default.existsSync(filePath)) {
+                fs_1.default.unlinkSync(filePath);
+                console.log(`[AYEDAS Delete] File deleted from filesystem: ${filePath}`);
             }
-            catch (fileError) {
-                console.error(`[BEDAS API] Dosya işleme hatası:`, fileError);
+            else {
+                console.warn(`[AYEDAS Delete] File not found on filesystem, proceeding with DB delete: ${filePath}`);
             }
         }
-        console.log(`[BEDAS API] Toplam ${savedDocuments.length} belge başarıyla işlendi`);
-        return res.json({
-            success: true,
-            data: {
-                step,
-                documents: savedDocuments,
-            },
-            message: "Belgeler başarıyla yüklendi."
-        });
-    }
-    catch (error) {
-        console.error("[BEDAS API] Belge yüklenirken hata:", error);
-        console.error("[BEDAS API] Hata detayı:", error.message);
-        if (error.code)
-            console.error("[BEDAS API] Hata kodu:", error.code);
-        return res.status(500).json({
-            success: false,
-            message: "Belgeler yüklenirken bir hata oluştu.",
-            error: error.message,
-            errorCode: error.code,
-            stack: process.env.NODE_ENV === "development" ? error.stack : undefined
-        });
-    }
-}));
-// GET: Belge indirme
-router.get('/bedas/notifications/:id/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { documentId } = req.params;
-        // Belgeyi veritabanından bul
-        const document = yield prisma.edasNotificationDocument.findUnique({
-            where: { id: documentId },
-            include: {
-                step: {
-                    include: {
-                        notification: true,
-                    },
-                },
-            },
-        });
-        if (!document) {
-            return res.status(404).json({
-                success: false,
-                message: "Belge bulunamadı."
-            });
+        catch (unlinkError) {
+            console.error(`[AYEDAS Delete] Error deleting file from filesystem: ${filePath}`, unlinkError);
         }
-        // Dosya yolunu al
-        const filePath = document.fileUrl;
-        // Dosyanın var olup olmadığını kontrol et
-        try {
-            yield fs_1.default.promises.access(filePath);
-        }
-        catch (error) {
-            return res.status(404).json({
-                success: false,
-                message: "Dosya sistemde bulunamadı."
-            });
-        }
-        // Dosyayı gönder
-        res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-        res.setHeader('Content-Type', document.fileType);
-        const fileStream = fs_1.default.createReadStream(filePath);
-        fileStream.pipe(res);
-    }
-    catch (error) {
-        console.error("Belge indirilirken hata:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Belge indirilirken bir hata oluştu.",
-            error: error.message,
-        });
-    }
-}));
-// DELETE: Belge silme
-router.delete('/bedas/notifications/:id/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { documentId } = req.params;
-        // Belgeyi veritabanından bul
-        const document = yield prisma.edasNotificationDocument.findUnique({
+        // Veritabanından belgeyi sil
+        yield prisma_1.prisma.edasNotificationDocument.delete({
             where: { id: documentId },
         });
-        if (!document) {
-            return res.status(404).json({
-                success: false,
-                message: "Belge bulunamadı."
-            });
-        }
-        // Dosya yolunu al
-        const filePath = document.fileUrl;
-        // Dosyayı veritabanından sil
-        yield prisma.edasNotificationDocument.delete({
-            where: { id: documentId },
-        });
-        // Dosyayı fiziksel olarak da sil (eğer mevcutsa)
-        try {
-            yield fs_1.default.promises.access(filePath);
-            yield fs_1.default.promises.unlink(filePath);
-        }
-        catch (error) {
-            // Dosya bulunamadıysa, sadece bir log kaydı oluştur ama işleme devam et
-            console.warn(`Dosya sistemde bulunamadı: ${filePath}`);
-        }
-        return res.json({
+        console.log(`[AYEDAS Delete] Document deleted from DB: ${documentId}`);
+        res.json({
             success: true,
             message: "Belge başarıyla silindi."
         });
     }
     catch (error) {
-        console.error("Belge silinirken hata:", error);
-        return res.status(500).json({
+        console.error("[AYEDAS Delete] Belge silinirken hata:", error);
+        if (error.code === 'P2025') { // Prisma: Kayıt bulunamadı hatası
+            res.status(404).json({ success: false, message: 'Silinecek belge veritabanında bulunamadı.' });
+            return;
+        }
+        res.status(500).json({
             success: false,
-            message: "Belge silinirken bir hata oluştu.",
+            message: "Belge silinirken bir sunucu hatası oluştu.",
             error: error.message,
         });
     }
 }));
-// POST: Belge yükleme
-router.post('/bedas/notifications/:id/documents', (0, express_fileupload_1.default)({
-    createParentPath: true,
-    limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-    abortOnLimit: true
-}), (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
-    const { id } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirime belge yükleme isteği alındı`);
-    // Dosya kontrolü
-    if (!req.files || Object.keys(req.files).length === 0) {
-        console.error(`[BEDAS API] Dosya bulunamadı`);
-        return res.status(400).json({
-            success: false,
-            message: "Yüklenecek dosya bulunamadı."
-        });
-    }
-    // Bildirim var mı kontrol et
-    const notification = yield prisma.edasNotification.findUnique({
-        where: { id },
-        include: {
-            steps: true
-        }
-    });
-    if (!notification) {
-        console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: `${id} ID'li bildirim bulunamadı.`
-        });
-    }
-    // Yükleme klasörünü oluştur
-    const uploadPath = `uploads/bedas/${id}/documents`;
+// GET: AYEDAŞ bildirimi belgesini indir
+router.get('/ayedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        yield fs_1.default.promises.mkdir(uploadPath, { recursive: true });
-        console.log(`[BEDAS API] Klasör oluşturuldu: ${uploadPath}`);
-    }
-    catch (err) {
-        console.error(`[BEDAS API] Klasör oluşturma hatası:`, err);
-    }
-    let file;
-    // Tek dosya kontrolü
-    if (Array.isArray(req.files.file)) {
-        file = req.files.file[0];
-    }
-    else {
-        file = req.files.file;
-    }
-    // Dosyayı yükle
-    const fileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.-]/g, '_')}`;
-    const filePath = `${uploadPath}/${fileName}`;
-    yield file.mv(filePath);
-    console.log(`[BEDAS API] Dosya başarıyla yüklendi: ${filePath}`);
-    // Veritabanına belge kaydı ekle
-    const document = yield prisma.edasNotificationDocument.create({
-        data: {
-            step: {
-                connect: {
-                    id: ((_a = notification.steps[0]) === null || _a === void 0 ? void 0 : _a.id) ||
-                        // Eğer adım yoksa hata ver
-                        (() => { throw new Error("Bildirime ait adım bulunamadı. Önce bir adım oluşturun."); })()
-                }
-            },
-            fileUrl: filePath,
-            fileName: file.name,
-            fileType: file.mimetype,
-            fileSize: file.size,
-        },
-    });
-    console.log(`[BEDAS API] Belge kaydı oluşturuldu, ID: ${document.id}`);
-    return res.json({
-        success: true,
-        data: document,
-        message: "Belge başarıyla yüklendi."
-    });
-})));
-// GET: Tüm belgeleri getir 
-router.get('/bedas/notifications/:id/documents', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirimin belgeleri isteniyor...`);
-    // Bildirimi adımları ve belgeleriyle birlikte getir
-    const notification = yield prisma.edasNotification.findUnique({
-        where: { id },
-        include: {
-            steps: {
-                include: {
-                    documents: true
+        const { notificationId, stepId, documentId } = req.params;
+        console.log(`[AYEDAS Download] Request for document: ${documentId}, step: ${stepId}, notification: ${notificationId}`);
+        const document = yield prisma_1.prisma.edasNotificationDocument.findFirst({
+            where: {
+                id: documentId,
+                step: {
+                    id: stepId,
+                    notificationId: notificationId,
+                    notification: {
+                        company: "AYEDAŞ"
+                    }
                 }
             }
+        });
+        if (!document) {
+            console.log(`[AYEDAS Download] Document not found or invalid context: ${documentId}`);
+            res.status(404).json({
+                success: false,
+                message: `${documentId} ID'li belge bulunamadı veya belirtilen AYEDAŞ bildirim/adımına ait değil.`,
+            });
+            return;
         }
-    });
-    if (!notification) {
-        console.log(`[BEDAS API] ${id} ID'li bildirim bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: `${id} ID'li bildirim bulunamadı.`
-        });
-    }
-    // Tüm belgeleri düz bir dizi olarak topla
-    const allDocuments = notification.steps.flatMap(step => step.documents);
-    console.log(`[BEDAS API] ${allDocuments.length} belge bulundu.`);
-    return res.json({
-        success: true,
-        data: allDocuments
-    });
-})));
-// GET: Belge indirme - Hatasız hale getirildi
-router.get('/bedas/notifications/:id/documents/:documentId', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id, documentId } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirimin ${documentId} ID'li belgesi isteniyor...`);
-    // Belgeyi veritabanından bul
-    const document = yield prisma.edasNotificationDocument.findUnique({
-        where: { id: documentId },
-        include: {
-            step: {
-                include: {
-                    notification: true,
-                },
-            },
-        },
-    });
-    if (!document) {
-        console.error(`[BEDAS API] ${documentId} ID'li belge bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: "Belge bulunamadı."
-        });
-    }
-    // Bildirimin doğru olduğunu kontrol et
-    if (document.step.notification.id !== id) {
-        console.error(`[BEDAS API] Belge bu bildirime ait değil.`);
-        return res.status(403).json({
-            success: false,
-            message: "Belge bu bildirime ait değil."
-        });
-    }
-    // Dosya yolunu al
-    const filePath = document.fileUrl;
-    // Dosyanın var olup olmadığını kontrol et
-    try {
-        yield fs_1.default.promises.access(filePath);
-    }
-    catch (error) {
-        console.error(`[BEDAS API] Dosya sistemde bulunamadı: ${filePath}`);
-        return res.status(404).json({
-            success: false,
-            message: "Dosya sistemde bulunamadı."
-        });
-    }
-    // Dosyayı gönder
-    res.setHeader('Content-Disposition', `attachment; filename="${document.fileName}"`);
-    res.setHeader('Content-Type', document.fileType);
-    const fileStream = fs_1.default.createReadStream(filePath);
-    fileStream.pipe(res);
-})));
-// DELETE: Belge silme - Hatasız hale getirildi
-router.delete('/bedas/notifications/:id/documents/:documentId', (0, error_handler_1.asyncHandler)((req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { id, documentId } = req.params;
-    console.log(`[BEDAS API] ${id} ID'li bildirimin ${documentId} ID'li belgesi siliniyor...`);
-    // Belgeyi veritabanından bul
-    const document = yield prisma.edasNotificationDocument.findUnique({
-        where: { id: documentId },
-        include: {
-            step: {
-                include: {
-                    notification: true,
-                },
-            },
-        },
-    });
-    if (!document) {
-        console.error(`[BEDAS API] ${documentId} ID'li belge bulunamadı.`);
-        return res.status(404).json({
-            success: false,
-            message: "Belge bulunamadı."
-        });
-    }
-    // Bildirimin doğru olduğunu kontrol et
-    if (document.step.notification.id !== id) {
-        console.error(`[BEDAS API] Belge bu bildirime ait değil.`);
-        return res.status(403).json({
-            success: false,
-            message: "Belge bu bildirime ait değil."
-        });
-    }
-    // Dosya yolunu al
-    const filePath = document.fileUrl;
-    // Dosyayı veritabanından sil
-    yield prisma.edasNotificationDocument.delete({
-        where: { id: documentId },
-    });
-    // Dosyayı fiziksel olarak da sil (eğer mevcutsa)
-    try {
+        // Gerçek dosya indirme mantığı
+        const filePath = path_1.default.join(__dirname, '..', '..', document.fileUrl); // Proje kök dizinine göre ayarla
+        console.log(`[AYEDAS Download] Attempting to send file: ${filePath}`);
         if (fs_1.default.existsSync(filePath)) {
-            yield fs_1.default.promises.unlink(filePath);
-            console.log(`[BEDAS API] Fiziksel dosya silindi: ${filePath}`);
+            res.download(filePath, document.fileName, (err) => {
+                if (err) {
+                    console.error(`[AYEDAS Download] Error sending file: ${filePath}`, err);
+                    if (!res.headersSent) {
+                        res.status(500).json({ success: false, message: 'Dosya gönderilirken bir hata oluştu.' });
+                    }
+                }
+                else {
+                    console.log(`[AYEDAS Download] File sent successfully: ${filePath} as ${document.fileName}`);
+                }
+            });
         }
         else {
-            console.warn(`[BEDAS API] Dosya sistemde bulunamadı: ${filePath}`);
+            console.error(`[AYEDAS Download] File not found on server: ${filePath}`);
+            res.status(404).json({ success: false, message: 'Dosya sunucuda bulunamadı.' });
         }
     }
     catch (error) {
-        // Dosya bulunamadıysa, sadece bir log kaydı oluştur ama işleme devam et
-        console.warn(`[BEDAS API] Dosya silme hatası: ${filePath}`, error);
+        console.error("[AYEDAS Download] Belge indirilirken hata:", error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: "Belge indirilirken bir sunucu hatası oluştu.",
+                error: error.message,
+            });
+        }
     }
-    console.log(`[BEDAS API] ${documentId} ID'li belge başarıyla silindi.`);
-    return res.json({
-        success: true,
-        message: "Belge başarıyla silindi."
-    });
-})));
+}));
+// BEDAŞ BİLDİRİM İŞLEMLERİ (AYEDAŞ ile benzer yapıda olmalı)
+// GET: Tüm BEDAŞ bildirimlerini getir
+router.get('/bedas/notifications', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const notifications = yield prisma_1.prisma.edasNotification.findMany({
+            where: { company: "BEDAŞ" }, // Filtre BEDAŞ olarak değiştirildi
+            include: {
+                steps: {
+                    orderBy: {
+                        stepType: 'asc'
+                    }
+                },
+            },
+            orderBy: {
+                createdAt: 'desc',
+            }
+        });
+        console.log(`[BEDAS API] ${notifications.length} adet BEDAŞ bildirimi bulundu.`);
+        res.json({
+            success: true,
+            data: notifications,
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS API] Bildirimler getirilirken hata:", error);
+        res.status(500).json({
+            success: false,
+            message: "BEDAŞ bildirimleri getirilirken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// GET: Tek bir BEDAŞ bildirimini getir
+router.get('/bedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const notification = yield prisma_1.prisma.edasNotification.findUnique({
+            where: { id },
+            include: {
+                steps: {
+                    orderBy: {
+                        createdAt: 'asc',
+                    },
+                    include: {
+                        documents: true // Adımlara ait belgeleri de getir
+                    }
+                },
+            },
+        });
+        if (!notification) {
+            res.status(404).json({
+                success: false,
+                message: `${id} ID'li BEDAŞ bildirimi bulunamadı.`
+            });
+            return;
+        }
+        // Şirket kontrolü
+        if (notification.company !== "BEDAŞ") {
+            res.status(400).json({
+                success: false,
+                message: `${id} ID'li bildirim BEDAŞ'a ait değil.`
+            });
+            return;
+        }
+        console.log(`[BEDAS API] ${id} ID'li BEDAŞ bildirimi bulundu.`);
+        res.json({
+            success: true,
+            data: notification,
+        });
+    }
+    catch (error) {
+        console.error(`[BEDAS API] ${req.params.id} ID'li BEDAŞ bildirimi getirilirken hata:`, error);
+        res.status(500).json({
+            success: false,
+            message: "BEDAŞ bildirimi getirilirken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// POST: Yeni BEDAŞ bildirimi oluştur
+router.post('/bedas/notifications', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b;
+    try {
+        const data = req.body;
+        data.company = "BEDAŞ"; // Şirketi BEDAŞ olarak ayarla
+        console.log("[BEDAS API] Yeni BEDAŞ bildirimi oluşturuluyor, veri:", data);
+        // Eksik alanları kontrol et (örneğin, refNo zorunlu mu?)
+        if (!data.refNo || !data.applicationType || !data.customerName) {
+            return res.status(400).json({
+                success: false,
+                message: 'Eksik alanlar: refNo, applicationType, customerName zorunludur.'
+            });
+        }
+        const newNotification = yield prisma_1.prisma.edasNotification.create({
+            data: {
+                company: data.company,
+                refNo: data.refNo,
+                applicationType: data.applicationType,
+                status: 'PENDING', // Varsayılan durum
+                currentStep: data.currentStep || "PROJE", // Varsayılan ilk adım (veya gelen değere göre)
+                projectName: data.projectName, // Opsiyonel olabilir
+                customerName: data.customerName,
+                city: data.city, // Opsiyonel olabilir
+                district: data.district, // Opsiyonel olabilir
+                parcelBlock: data.parcelBlock, // Opsiyonel olabilir
+                parcelNo: data.parcelNo, // Opsiyonel olabilir
+            },
+        });
+        console.log(`[BEDAS API] Yeni BEDAŞ bildirimi başarıyla oluşturuldu: ${newNotification.id}`);
+        res.status(201).json({
+            success: true,
+            data: newNotification,
+            message: "BEDAŞ bildirimi başarıyla oluşturuldu."
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS API] Yeni bildirim oluşturulurken hata:", error);
+        // Prisma unique constraint hatasını kontrol et (örn: refNo zaten varsa)
+        if (error.code === 'P2002') {
+            return res.status(409).json({
+                success: false,
+                message: 'Bu referans numarası ile zaten bir bildirim mevcut.',
+                error: `Alan(lar): ${(_b = (_a = error.meta) === null || _a === void 0 ? void 0 : _a.target) === null || _b === void 0 ? void 0 : _b.join(', ')}`
+            });
+        }
+        res.status(500).json({
+            success: false,
+            message: "Bildirim oluşturulurken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// POST: BEDAŞ bildirimine yeni adım ekle veya güncelle
+router.post('/bedas/notifications/:notificationId/steps', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { notificationId } = req.params;
+        const { stepType, status, notes } = req.body;
+        console.log(`[BEDAS API] Bildirim ${notificationId}, Adım ${stepType}, Durum ${status}`);
+        // Bildirim var mı ve BEDAŞ'a mı ait kontrol et
+        const notification = yield prisma_1.prisma.edasNotification.findFirst({
+            where: {
+                id: notificationId,
+                company: "BEDAŞ" // Şirket kontrolü eklendi
+            }
+        });
+        if (!notification) {
+            res.status(404).json({ success: false, message: 'İlgili BEDAŞ bildirimi bulunamadı.' });
+            return;
+        }
+        // Adım zaten var mı kontrol et
+        let step = yield prisma_1.prisma.edasNotificationStep.findFirst({
+            where: {
+                notificationId: notificationId,
+                stepType: stepType,
+            },
+        });
+        let resultData;
+        let statusCode = 200;
+        let messageAction = 'güncellendi';
+        if (step) {
+            // Adım varsa güncelle
+            console.log(`[BEDAS API] Adım ${stepType} güncelleniyor.`);
+            step = yield prisma_1.prisma.edasNotificationStep.update({
+                where: { id: step.id },
+                data: { status, notes },
+            });
+            resultData = { step, notification };
+        }
+        else {
+            // Adım yoksa oluştur
+            console.log(`[BEDAS API] Adım ${stepType} oluşturuluyor.`);
+            statusCode = 201;
+            messageAction = 'oluşturuldu';
+            step = yield prisma_1.prisma.edasNotificationStep.create({
+                data: {
+                    notificationId: notificationId,
+                    stepType: stepType,
+                    status: status,
+                    notes: notes,
+                },
+            });
+            resultData = { step, notification };
+        }
+        res.status(statusCode).json({
+            success: true,
+            data: resultData,
+            message: `BEDAŞ Adım ${stepType} başarıyla ${messageAction}.`
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS API] Adım işlenirken hata:", error);
+        res.status(500).json({
+            success: false,
+            message: "BEDAŞ adımı işlenirken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// PUT: BEDAŞ adım durumu güncelleme
+router.put('/bedas/notifications/:notificationId/steps/:stepId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { notificationId, stepId } = req.params;
+        const { status, notes } = req.body;
+        console.log(`[BEDAS API] Step Update Request: notificationId=${notificationId}, stepId=${stepId}, status=${status}`);
+        // Adım var mı ve doğru BEDAŞ bildirimine mi ait kontrol et
+        const step = yield prisma_1.prisma.edasNotificationStep.findFirst({
+            where: {
+                id: stepId,
+                notificationId: notificationId,
+                notification: {
+                    company: "BEDAŞ"
+                }
+            }
+        });
+        if (!step) {
+            console.log(`[BEDAS API] Step not found or does not belong to BEDAŞ: ${stepId}`);
+            res.status(404).json({
+                success: false,
+                message: `${stepId} ID'li adım bulunamadı veya ilgili BEDAŞ bildirimine ait değil.`
+            });
+            return;
+        }
+        // Adımı güncelle
+        const updatedStep = yield prisma_1.prisma.edasNotificationStep.update({
+            where: { id: stepId },
+            data: { status, notes },
+            include: {
+                notification: true
+            }
+        });
+        console.log(`[BEDAS API] Step ${stepId} updated successfully.`);
+        res.json({
+            success: true,
+            data: { step: updatedStep, notification: updatedStep.notification },
+            message: "BEDAŞ adım durumu başarıyla güncellendi."
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS API] Adım güncellenirken hata:", error);
+        if (error.code === 'P2025') {
+            res.status(404).json({ success: false, message: 'Güncellenecek BEDAŞ adımı bulunamadı.' });
+            return;
+        }
+        res.status(500).json({
+            success: false,
+            message: "BEDAŞ adımı güncellenirken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// BEDAŞ BİLDİRİM BELGELERİ (Yeni Eklendi)
+// POST: BEDAŞ bildiriminin adımına belge ekle
+router.post('/bedas/notifications/:notificationId/steps/:stepId/documents', multer_middleware_1.upload.array('files'), // Birden fazla dosya için .array() kullan
+(req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { notificationId, stepId } = req.params;
+        const files = req.files; // Yüklenen dosyalar (dizi)
+        const body = req.body; // Metin alanları (örneğin documentType)
+        if (!files || files.length === 0) {
+            res.status(400).json({ success: false, message: 'Dosya yüklenmedi.' });
+            return;
+        }
+        // Adım var mı ve BEDAŞ'a mı ait kontrol et
+        const step = yield prisma_1.prisma.edasNotificationStep.findFirst({
+            where: {
+                id: stepId,
+                notificationId: notificationId,
+                notification: {
+                    company: "BEDAŞ"
+                }
+            },
+        });
+        if (!step) {
+            // Yüklenen tüm geçici dosyaları sil
+            files.forEach(file => {
+                try {
+                    if (fs_1.default.existsSync(file.path)) {
+                        fs_1.default.unlinkSync(file.path);
+                    }
+                }
+                catch (unlinkError) {
+                    console.error(`Dosya silinirken hata (${file.filename}):`, unlinkError);
+                }
+            });
+            res.status(404).json({
+                success: false,
+                message: `${stepId} ID'li BEDAŞ adımı bulunamadı.`,
+            });
+            return;
+        }
+        console.log(`[BEDAS Upload] Received ${files.length} files for step ${stepId}`);
+        console.log("[BEDAS Upload] Received body:", body); // documentType buradan alınacak
+        const createdDocuments = [];
+        for (const file of files) {
+            // fileUrl'yi backend'de oluştur
+            const generatedFileUrl = `/uploads/edas-documents/${file.filename}`;
+            // Veritabanına kaydedilecek veriyi hazırla
+            const documentData = {
+                stepId: stepId,
+                fileUrl: generatedFileUrl,
+                originalName: file.originalname,
+                fileName: file.filename,
+                fileType: file.mimetype,
+                fileSize: file.size,
+                documentType: body.documentType || 'Diğer', // Frontend'den gelen documentType'ı kullan
+            };
+            // Alanların undefined/null olmadığını kontrol et
+            if (!documentData.stepId || !documentData.fileUrl || !documentData.originalName || !documentData.fileName || !documentData.fileType || isNaN(documentData.fileSize) || !documentData.documentType) {
+                console.error("[BEDAS Upload] Prisma'ya gönderilmeden önce eksik/geçersiz alanlar:", documentData);
+                // Bu dosya için hata oluştu, ancak diğerlerini işlemeye devam edebiliriz veya tüm işlemi iptal edebiliriz.
+                // Şimdilik bu dosyayı atlayıp loglayalım. Gerçek uygulamada daha sağlam bir hata yönetimi gerekir.
+                console.error(`Skipping file due to missing data: ${file.originalname}`);
+                // Geçici dosyayı sil
+                try {
+                    if (fs_1.default.existsSync(file.path)) {
+                        fs_1.default.unlinkSync(file.path);
+                    }
+                }
+                catch (unlinkError) {
+                    console.error(`Dosya silinirken hata (${file.filename}):`, unlinkError);
+                }
+                continue; // Sonraki dosyaya geç
+            }
+            try {
+                const newDocument = yield prisma_1.prisma.edasNotificationDocument.create({
+                    data: documentData,
+                });
+                createdDocuments.push(newDocument);
+            }
+            catch (dbError) {
+                console.error(`[BEDAS Upload] Veritabanına kaydederken hata (${file.originalname}):`, dbError);
+                // Veritabanı hatası durumunda yüklenen dosyayı sil
+                try {
+                    if (fs_1.default.existsSync(file.path)) {
+                        fs_1.default.unlinkSync(file.path);
+                    }
+                }
+                catch (unlinkError) {
+                    console.error(`DB hatası sonrası dosya silinirken hata (${file.filename}):`, unlinkError);
+                }
+                // Belki diğer dosyalar başarıyla kaydedildi, bu yüzden işlemi tamamen durdurmak yerine
+                // sadece bu dosyanın hatasını loglamak daha iyi olabilir.
+            }
+        } // for döngüsü sonu
+        // Başarılı bir şekilde oluşturulan belge yoksa ve en az bir dosya geldiyse hata döndür
+        if (createdDocuments.length === 0 && files.length > 0) {
+            res.status(400).json({
+                success: false,
+                message: "Belgeler işlenirken hata oluştu, hiçbiri kaydedilemedi."
+            });
+            return;
+        }
+        // En az bir belge başarıyla oluşturulduysa
+        res.status(201).json({
+            success: true,
+            data: { documents: createdDocuments }, // Oluşturulan belgeleri döndür
+            message: `${createdDocuments.length} adet belge başarıyla eklendi.`
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS Upload] Belge eklenirken genel hata:", error);
+        // Hata durumunda yüklenen tüm dosyaları silmeye çalış (eğer req.files varsa)
+        if (req.files && Array.isArray(req.files)) {
+            req.files.forEach(file => {
+                try {
+                    if (fs_1.default.existsSync(file.path)) {
+                        fs_1.default.unlinkSync(file.path);
+                    }
+                }
+                catch (unlinkError) {
+                    console.error(`Genel hata sonrası dosya silinirken hata (${file.filename}):`, unlinkError);
+                }
+            });
+        }
+        res.status(500).json({
+            success: false,
+            message: "Belgeler eklenirken bir sunucu hatası oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// DELETE: BEDAŞ bildirimi belgesini sil
+router.delete('/bedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { notificationId, stepId, documentId } = req.params;
+        console.log(`[BEDAS Delete] Deleting document: ${documentId} for step ${stepId} of notification ${notificationId}`);
+        // Belge var mı ve doğru BEDAŞ adımına/bildirimine mi ait kontrol et
+        const document = yield prisma_1.prisma.edasNotificationDocument.findFirst({
+            where: {
+                id: documentId,
+                step: {
+                    id: stepId,
+                    notificationId: notificationId,
+                    notification: {
+                        company: "BEDAŞ"
+                    }
+                }
+            }
+        });
+        if (!document) {
+            console.log(`[BEDAS Delete] Document not found or invalid context: ${documentId}`);
+            res.status(404).json({
+                success: false,
+                message: `${documentId} ID'li belge bulunamadı veya belirtilen BEDAŞ bildirim/adımına ait değil.`,
+            });
+            return;
+        }
+        // Dosya sisteminden belgeyi sil
+        const filePath = path_1.default.join(__dirname, '..', '..', document.fileUrl); // Proje kök dizinine göre ayarla
+        try {
+            if (fs_1.default.existsSync(filePath)) {
+                fs_1.default.unlinkSync(filePath);
+                console.log(`[BEDAS Delete] File deleted from filesystem: ${filePath}`);
+            }
+            else {
+                console.warn(`[BEDAS Delete] File not found on filesystem, proceeding with DB delete: ${filePath}`);
+            }
+        }
+        catch (unlinkError) {
+            console.error(`[BEDAS Delete] Error deleting file from filesystem: ${filePath}`, unlinkError);
+        }
+        // Veritabanından belgeyi sil
+        yield prisma_1.prisma.edasNotificationDocument.delete({
+            where: { id: documentId },
+        });
+        console.log(`[BEDAS Delete] Document deleted from DB: ${documentId}`);
+        res.json({
+            success: true,
+            message: "Belge başarıyla silindi."
+        });
+    }
+    catch (error) {
+        console.error("[BEDAS Delete] Belge silinirken hata:", error);
+        if (error.code === 'P2025') {
+            res.status(404).json({ success: false, message: 'Silinecek belge veritabanında bulunamadı.' });
+            return;
+        }
+        res.status(500).json({
+            success: false,
+            message: "Belge silinirken bir sunucu hatası oluştu.",
+            error: error.message,
+        });
+    }
+}));
+// GET: BEDAŞ bildirimi belgesini indir
+router.get('/bedas/notifications/:notificationId/steps/:stepId/documents/:documentId', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { notificationId, stepId, documentId } = req.params;
+        console.log(`[BEDAS Download] Request for document: ${documentId}, step: ${stepId}, notification: ${notificationId}`);
+        const document = yield prisma_1.prisma.edasNotificationDocument.findFirst({
+            where: {
+                id: documentId,
+                step: {
+                    id: stepId,
+                    notificationId: notificationId,
+                    notification: {
+                        company: "BEDAŞ"
+                    }
+                }
+            }
+        });
+        if (!document) {
+            console.log(`[BEDAS Download] Document not found or invalid context: ${documentId}`);
+            res.status(404).json({
+                success: false,
+                message: `${documentId} ID'li belge bulunamadı veya belirtilen BEDAŞ bildirim/adımına ait değil.`,
+            });
+            return;
+        }
+        // Gerçek dosya indirme mantığı
+        const filePath = path_1.default.join(__dirname, '..', '..', document.fileUrl); // Proje kök dizinine göre ayarla
+        console.log(`[BEDAS Download] Attempting to send file: ${filePath}`);
+        if (fs_1.default.existsSync(filePath)) {
+            res.download(filePath, document.fileName, (err) => {
+                if (err) {
+                    console.error(`[BEDAS Download] Error sending file: ${filePath}`, err);
+                    if (!res.headersSent) {
+                        res.status(500).json({ success: false, message: 'Dosya gönderilirken bir hata oluştu.' });
+                    }
+                }
+                else {
+                    console.log(`[BEDAS Download] File sent successfully: ${filePath} as ${document.fileName}`);
+                }
+            });
+        }
+        else {
+            console.error(`[BEDAS Download] File not found on server: ${filePath}`);
+            res.status(404).json({ success: false, message: 'Dosya sunucuda bulunamadı.' });
+        }
+    }
+    catch (error) {
+        console.error("[BEDAS Download] Belge indirilirken hata:", error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: "Belge indirilirken bir sunucu hatası oluştu.",
+                error: error.message,
+            });
+        }
+    }
+}));
+// DELETE: BEDAŞ bildirimini sil
+router.delete('/bedas/notifications/:id', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        console.log(`[BEDAS API] ${id} ID'li BEDAŞ bildirimi siliniyor...`);
+        // Bildirimin varlığını ve BEDAŞ'a ait olduğunu kontrol et (opsiyonel ama iyi pratik)
+        const notification = yield prisma_1.prisma.edasNotification.findUnique({
+            where: { id },
+        });
+        if (!notification) {
+            return res.status(404).json({
+                success: false,
+                message: `${id} ID'li bildirim bulunamadı.`,
+            });
+        }
+        if (notification.company !== "BEDAŞ") {
+            return res.status(400).json({
+                success: false,
+                message: `${id} ID'li bildirim BEDAŞ'a ait değil, silinemez.`
+            });
+        }
+        // Prisma schema'da cascade delete tanımlıysa ilişkili veriler otomatik silinir.
+        // Tanımlı değilse, önce adımları ve belgeleri manuel silmek gerekebilir:
+        // await prisma.edasNotificationDocument.deleteMany({ where: { step: { notificationId: id } } });
+        // await prisma.edasNotificationStep.deleteMany({ where: { notificationId: id } });
+        yield prisma_1.prisma.edasNotification.delete({
+            where: { id },
+        });
+        console.log(`[BEDAS API] ${id} ID'li BEDAŞ bildirimi başarıyla silindi.`);
+        // Başarılı silme işleminde 204 No Content döndürmek daha standarttır.
+        res.status(204).send(); // Yanıt gövdesi gönderme
+    }
+    catch (error) {
+        console.error(`[BEDAS API] ${req.params.id} ID'li bildirim silinirken hata:`, error);
+        // P2025: Silinmeye çalışılan kayıt bulunamadı.
+        if (error.code === 'P2025') {
+            res.status(404).json({
+                success: false,
+                message: `${req.params.id} ID'li bildirim bulunamadı.`,
+            });
+            return;
+        }
+        // Diğer hatalar
+        res.status(500).json({
+            success: false,
+            message: "Bildirim silinirken bir hata oluştu.",
+            error: error.message,
+        });
+    }
+}));
 exports.default = router;

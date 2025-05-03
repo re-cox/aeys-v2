@@ -24,6 +24,9 @@ export interface Employee {
   id: string;
   userId?: string | null;
   user?: User | null;
+  name?: string;
+  surname?: string;
+  email?: string;
   position?: string;
   departmentId?: string;
   department?: Department;
@@ -42,10 +45,13 @@ export interface Employee {
   militaryStatus?: string;
   salaryVisibleTo?: string[];
   salary?: number;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelation?: string | null;
   emergencyContacts?: EmergencyContact;
   documents?: EmployeeDocument[];
   createdAt?: Date | string;
-  updatedAt?: Date | string | null;
+  updatedAt?: Date | string;
 }
 
 export interface EmployeeWithUser extends Employee {
@@ -147,4 +153,21 @@ export type CreateUserResponse = {
     } | null;
   };
   createdAt?: string | Date;
-}; 
+};
+
+export interface EmployeeWithUserData extends Omit<Employee, 'user'> {
+  user?: {
+    id: string;
+    email: string;
+    name?: string | null;
+    surname?: string | null;
+    role?: {
+      id: string;
+      name: string;
+    };
+  };
+  roleId?: string;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  emergencyContactRelation?: string | null;
+} 

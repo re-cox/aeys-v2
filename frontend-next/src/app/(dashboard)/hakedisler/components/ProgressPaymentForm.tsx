@@ -62,7 +62,7 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
     defaultValues: {
       projectId: selectedProjectId || '',
       description: '',
-      requestedAmount: undefined,
+      requestedAmount: 0,
       dueDate: null,
       notes: '',
     },
@@ -145,7 +145,13 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
             <FormItem>
               <FormLabel>Talep Edilen Tutar (₺)</FormLabel>
               <FormControl>
-                <Input type="number" step="0.01" placeholder="0.00" {...field} />
+                <Input 
+                  type="number" 
+                  step="0.01" 
+                  placeholder="0.00" 
+                  {...field} 
+                  value={field.value || ''} 
+                />
               </FormControl>
               <FormMessage />
             </FormItem>

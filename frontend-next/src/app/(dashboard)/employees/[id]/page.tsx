@@ -30,6 +30,14 @@ export default function EmployeeDetailPage() {
       try {
         setLoading(true);
         const data = await getEmployeeById(employeeId);
+        
+        if (!data) {
+          setError("Personel bilgileri bulunamadı.");
+          toast.error("Personel bilgileri bulunamadı.");
+          return;
+        }
+        
+        console.log("Personel detayları alındı:", data);
         setEmployee(data);
         setError(null);
       } catch (error) {
@@ -151,10 +159,9 @@ export default function EmployeeDetailPage() {
   }
 
   // API yapısına göre veriyi düzenle
-  const userData = employee;
-  const employeeData = employee.employee || {};
-  const departmentData = employeeData.department || {};
-  const documents = employeeData.documents || [];
+  const userData = employee.user || {};
+  const departmentData = employee.department || {};
+  const documents = employee.documents || [];
 
   return (
     <div className="container mx-auto px-4 py-8">
@@ -173,7 +180,7 @@ export default function EmployeeDetailPage() {
             <Printer className="h-4 w-4 mr-1" />
             Yazdır
           </Button>
-          <Button onClick={() => router.push(`/employees/edit/${userData.id}`)} className="bg-blue-600 hover:bg-blue-700 text-white">
+          <Button onClick={() => router.push(`/employees/edit/${employee.id}`)} className="bg-blue-600 hover:bg-blue-700 text-white">
             <Edit className="h-4 w-4 mr-1" />
             Düzenle
           </Button>
@@ -186,17 +193,17 @@ export default function EmployeeDetailPage() {
           <div className="md:mr-6 mb-4 md:mb-0 flex-shrink-0">
             <div className="w-full md:w-auto flex flex-col items-center gap-4">
               <div className="relative w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center">
-                {employeeData.profilePictureUrl ? (
+                {employee.profilePictureUrl ? (
                   <img 
-                    src={getFullImageUrl(employeeData.profilePictureUrl)}
-                    alt={`${userData.name} fotoğrafı`}
+                    src={getFullImageUrl(employee.profilePictureUrl)}
+                    alt={`${employee.name} fotoğrafı`}
                     className="w-full h-full object-cover"
                     crossOrigin="anonymous"
                   />
                 ) : (
                   <div className="flex items-center justify-center w-full h-full bg-blue-100 dark:bg-blue-900/30">
                     <span className="text-4xl font-semibold text-blue-500 dark:text-blue-300">
-                      {(userData.name || '').charAt(0).toUpperCase()}{(userData.surname || '').charAt(0).toUpperCase()}
+                      {(employee.name || '').charAt(0).toUpperCase()}{(employee.surname || '').charAt(0).toUpperCase()}
                     </span>
                   </div>
                 )}
@@ -212,9 +219,9 @@ export default function EmployeeDetailPage() {
 
           <div className="flex-grow">
             <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-1">
-              {userData.name} {userData.surname}
+              {employee.name} {employee.surname}
             </h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400 mb-4">{employeeData.position || "Pozisyon belirtilmemiş"}</p>
+            <p className="text-lg text-gray-600 dark:text-gray-400 mb-4">{employee.position || "Pozisyon belirtilmemiş"}</p>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="flex items-center text-gray-600 dark:text-gray-400">
@@ -223,15 +230,15 @@ export default function EmployeeDetailPage() {
               </div>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
                 <Mail className="h-4 w-4 mr-2" />
-                <span>{userData.email || "Email belirtilmemiş"}</span>
+                <span>{employee.email || "Email belirtilmemiş"}</span>
               </div>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
                 <Phone className="h-4 w-4 mr-2" />
-                <span>{employeeData.phoneNumber || "Telefon belirtilmemiş"}</span>
+                <span>{employee.phoneNumber || "Telefon belirtilmemiş"}</span>
               </div>
               <div className="flex items-center text-gray-600 dark:text-gray-400">
                 <Calendar className="h-4 w-4 mr-2" />
-                <span>İşe Başlama: {formatDate(employeeData.hireDate)}</span>
+                <span>İşe Başlama: {formatDate(employee.hireDate)}</span>
               </div>
             </div>
           </div>
@@ -261,32 +268,32 @@ export default function EmployeeDetailPage() {
                   <div className="flex items-center text-sm">
                     <Calendar className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Doğum Tarihi:</span>
-                    <span>{formatDate(employeeData.birthDate)}</span>
+                    <span>{formatDate(employee.birthDate)}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <Droplet className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Kan Grubu:</span>
-                    <span>{employeeData.bloodType || "Belirtilmemiş"}</span>
+                    <span>{employee.bloodType || "Belirtilmemiş"}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <Shield className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Askerlik:</span>
-                    <span>{translateMilitaryStatus(employeeData.militaryStatus)}</span>
+                    <span>{translateMilitaryStatus(employee.militaryStatus)}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <GraduationCap className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Öğrenim:</span>
-                    <span>{translateEducation(employeeData.education)}</span>
+                    <span>{translateEducation(employee.education)}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <User className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">T.C. Kimlik No:</span>
-                    <span>{employeeData.tcKimlikNo || "Belirtilmemiş"}</span>
+                    <span>{employee.tcKimlikNo || "Belirtilmemiş"}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <CarFront className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Ehliyet:</span>
-                    <span>{employeeData.drivingLicense || "Belirtilmemiş"}</span>
+                    <span>{employee.drivingLicense || "Belirtilmemiş"}</span>
                   </div>
                 </CardContent>
               </Card>
@@ -299,17 +306,17 @@ export default function EmployeeDetailPage() {
                   <div className="flex items-center text-sm">
                     <CreditCard className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">IBAN:</span>
-                    <span className="break-all">{employeeData.iban || "Belirtilmemiş"}</span>
+                    <span className="break-all">{employee.iban || "Belirtilmemiş"}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <CreditCard className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Maaş:</span>
-                    <span>{formatCurrency(employeeData.salary)}</span>
+                    <span>{formatCurrency(employee.salary)}</span>
                   </div>
                   <div className="flex items-center text-sm">
                     <Calendar className="h-4 w-4 mr-2 text-gray-500" />
                     <span className="text-gray-500 w-28">Yıllık İzin:</span>
-                    <span>{employeeData.annualLeaveAllowance || "Belirtilmemiş"} gün</span>
+                    <span>{employee.annualLeaveAllowance || "Belirtilmemiş"} gün</span>
                   </div>
                 </CardContent>
               </Card>
@@ -322,7 +329,7 @@ export default function EmployeeDetailPage() {
                   <div className="flex items-start text-sm">
                     <MapPin className="h-4 w-4 mr-2 text-gray-500 mt-0.5" />
                     <span className="text-gray-500 w-28">Adres:</span>
-                    <span>{employeeData.address || "Belirtilmemiş"}</span>
+                    <span>{employee.address || "Belirtilmemiş"}</span>
                   </div>
                   
                   <div className="pt-3 border-t border-gray-200 dark:border-gray-600 mt-3">
@@ -331,17 +338,17 @@ export default function EmployeeDetailPage() {
                       <div className="flex items-center text-sm">
                         <User className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-gray-500 w-28">İsim:</span>
-                        <span>{employeeData.emergencyContactName || "Belirtilmemiş"}</span>
+                        <span>{employee.emergencyContactName || "Belirtilmemiş"}</span>
                       </div>
                       <div className="flex items-center text-sm">
                         <Phone className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-gray-500 w-28">Telefon:</span>
-                        <span>{employeeData.emergencyContactPhone || "Belirtilmemiş"}</span>
+                        <span>{employee.emergencyContactPhone || "Belirtilmemiş"}</span>
                       </div>
                       <div className="flex items-center text-sm">
                         <LifeBuoy className="h-4 w-4 mr-2 text-gray-500" />
                         <span className="text-gray-500 w-28">Yakınlık:</span>
-                        <span>{employeeData.emergencyContactRelation || "Belirtilmemiş"}</span>
+                        <span>{employee.emergencyContactRelation || "Belirtilmemiş"}</span>
                       </div>
                     </div>
                   </div>
@@ -356,15 +363,15 @@ export default function EmployeeDetailPage() {
               <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                 <div className="flex items-center">
                   <span className="text-gray-500 w-32">Kullanıcı ID:</span>
-                  <span className="font-mono">{userData.id}</span>
+                  <span className="font-mono">{employee.id}</span>
                 </div>
                 <div className="flex items-center">
                   <span className="text-gray-500 w-32">Oluşturulma:</span>
-                  <span>{formatDate(userData.createdAt)}</span>
+                  <span>{formatDate(employee.createdAt)}</span>
                 </div>
                 <div className="flex items-center">
                   <span className="text-gray-500 w-32">Son Güncelleme:</span>
-                  <span>{formatDate(userData.updatedAt)}</span>
+                  <span>{formatDate(employee.updatedAt)}</span>
                 </div>
               </CardContent>
             </Card>
@@ -373,46 +380,45 @@ export default function EmployeeDetailPage() {
           <TabsContent value="documents">
             <Card>
               <CardContent className="pt-6">
-                {documents && documents.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {documents.length > 0 ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-2">
                     {documents.map((doc: EmployeeDocument) => (
                       <div 
                         key={doc.id} 
-                        className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700/30 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700/50 transition-colors"
+                        className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 flex flex-col"
                       >
-                        <div className="flex items-center overflow-hidden">
-                          <FileText className="h-5 w-5 text-blue-500 mr-3 flex-shrink-0" />
-                          <div className="truncate">
-                            <p className="text-sm font-medium truncate">{doc.name}</p>
-                            <span className="text-xs text-gray-500 dark:text-gray-400">
-                              {doc.type} 
-                              {doc.size ? ` • ${formatFileSize(doc.size)}` : ''} 
-                              {doc.uploadDate ? ` • ${formatDate(doc.uploadDate)}` : ''}
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center">
+                            <FileText className="h-4 w-4 text-blue-500 mr-2" />
+                            <span className="font-medium truncate max-w-[160px]" title={doc.name}>
+                              {doc.name}
                             </span>
                           </div>
+                          <a
+                            href={getFullImageUrl(doc.url)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-500 hover:text-blue-700"
+                          >
+                            <Download className="h-4 w-4" />
+                          </a>
                         </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          className="ml-2 flex-shrink-0"
-                          onClick={() => {
-                            if (doc.url) {
-                              window.open(doc.url, '_blank');
-                            }
-                          }}
-                          disabled={!doc.url}
-                        >
-                          <Download className="h-4 w-4 mr-1" />
-                          İndir
-                        </Button>
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-auto">
+                          <div className="flex justify-between">
+                            <span>Dosya Tipi: {doc.type || "Bilinmiyor"}</span>
+                            <span>{formatFileSize(doc.size)}</span>
+                          </div>
+                          <div className="mt-1">
+                            {formatDate(doc.uploadDate)}
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center text-gray-500 dark:text-gray-400 py-12 bg-gray-50 dark:bg-gray-800/50 rounded-lg">
-                    <FileText className="h-12 w-12 mx-auto mb-3 text-gray-400 dark:text-gray-500" />
-                    <p className="text-lg font-medium mb-1">Döküman Bulunamadı</p>
-                    <p className="text-sm">Bu personel için yüklenmiş döküman bulunmamaktadır.</p>
+                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
+                    <FileText className="h-10 w-10 mx-auto mb-2 opacity-50" />
+                    <p>Henüz hiç döküman yüklenmemiş.</p>
                   </div>
                 )}
               </CardContent>

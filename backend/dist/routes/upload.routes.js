@@ -19,6 +19,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 const uuid_1 = require("uuid");
 const errorHandler_1 = __importDefault(require("../utils/errorHandler"));
+const upload_controller_1 = require("../controllers/upload.controller");
 const router = express_1.default.Router();
 // Yükleme dizinini oluştur
 const uploadDir = path_1.default.join(__dirname, '../../uploads');
@@ -44,12 +45,14 @@ const upload = (0, multer_1.default)({
         cb(null, true);
     }
 });
+// Tüm rotalar için kimlik doğrulama gerekli
+router.use(auth_middleware_1.authenticate);
 /**
  * @route POST /api/uploads
  * @desc Dosya yükleme
  * @access Private
  */
-router.post('/', auth_middleware_1.authenticate, upload.single('file'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.post('/', upload.single('file'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.file) {
             return res.status(400).json({ error: 'Yüklenecek dosya bulunamadı' });
@@ -103,7 +106,7 @@ router.get('/:filename', (req, res) => {
  * @desc Dosya silme
  * @access Private
  */
-router.delete('/:filename', auth_middleware_1.authenticate, (req, res) => {
+router.delete('/:filename', (req, res) => {
     try {
         const { filename } = req.params;
         const filePath = path_1.default.join(uploadDir, filename);
@@ -123,4 +126,6 @@ router.delete('/:filename', auth_middleware_1.authenticate, (req, res) => {
         return (0, errorHandler_1.default)(error, req, res);
     }
 });
+// POST /api/upload
+router.post('/', upload_controller_1.uploadFile);
 exports.default = router;

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { 
-  ArrowLeft, X, Upload, User, FileText, XCircle
+  ArrowLeft, X, Upload, User, FileText, XCircle, Loader2, Save
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,6 +20,8 @@ import { toast } from "sonner";
 import { Employee, EmployeeDocument, EmergencyContact } from "@/types/employee";
 import { Department } from "@/types/department";
 import { useAuth } from "@/context/AuthContext";
+import { format } from "date-fns";
+import { tr } from "date-fns/locale";
 
 export default function EditEmployeePage() {
   const router = useRouter();
@@ -73,64 +75,57 @@ export default function EditEmployeePage() {
     if (!employeeId) return;
     try {
       setLoading(true);
-      const apiData: BackendUserData | null = await getEmployeeById(employeeId);
+      const apiData = await getEmployeeById(employeeId);
       console.log("API'den gelen veri:", apiData);
       
-      if (!apiData || !apiData.employee) {
+      if (!apiData) {
         toast.error("Personel bilgileri bulunamadı veya eksik.");
         router.push('/employees');
         return;
       }
 
-      const relativeImageUrl = apiData.employee.profilePictureUrl || null;
+      const relativeImageUrl = apiData.profilePictureUrl || null;
+      if (relativeImageUrl) {
+        const getFullImageUrl = (path: string) => {
+          const backendBaseUrl = API_URL.replace('/api', '');
+          return `${backendBaseUrl}${path}`;
+        };
+        
+        setProfileImagePreview(getFullImageUrl(relativeImageUrl));
+      }
 
       const formattedEmployee: Partial<Employee> = {
         id: apiData.id,
         name: apiData.name || '',
         surname: apiData.surname || '',
         email: apiData.email || '',
-        phoneNumber: apiData.employee.phoneNumber || '',
-        position: apiData.employee.position || apiData.role?.name || '',
-        departmentId: apiData.employee.departmentId || undefined,
-        department: apiData.employee.department || undefined,
-        hireDate: apiData.employee.hireDate ? formatDate(apiData.employee.hireDate.toString()) : '',
-        birthDate: apiData.employee.birthDate ? formatDate(apiData.employee.birthDate.toString()) : '',
-        salary: apiData.employee.salary ?? undefined,
-        tcKimlikNo: apiData.employee.tcKimlikNo || '',
-        bloodType: apiData.employee.bloodType || '',
-        drivingLicense: apiData.employee.drivingLicense || '',
-        address: apiData.employee.address || '',
-        emergencyContacts: apiData.employee.emergencyContactName || apiData.employee.emergencyContactPhone || apiData.employee.emergencyContactRelation ? {
-            id: 'temp-emergency-id',
-            name: apiData.employee.emergencyContactName || '',
-            phone: apiData.employee.emergencyContactPhone || '',
-            relation: apiData.employee.emergencyContactRelation || ''
-        } : undefined,
-        documents: apiData.employee.documents || [],
-        profilePictureUrl: relativeImageUrl || '',
-        iban: apiData.employee.iban || '',
-        militaryStatus: apiData.employee.militaryStatus || '',
-        education: apiData.employee.education || '',
-        annualLeaveAllowance: apiData.employee.annualLeaveAllowance ?? undefined,
+        phoneNumber: apiData.phoneNumber || '',
+        position: apiData.position || '',
+        departmentId: apiData.departmentId || '',
+        tcKimlikNo: apiData.tcKimlikNo || '',
+        address: apiData.address || '',
+        iban: apiData.iban || '',
+        hireDate: apiData.hireDate ? new Date(apiData.hireDate) : undefined,
+        birthDate: apiData.birthDate ? new Date(apiData.birthDate) : undefined,
+        bloodType: apiData.bloodType || '',
+        drivingLicense: apiData.drivingLicense || '',
+        education: apiData.education || '',
+        militaryStatus: apiData.militaryStatus || '',
+        annualLeaveAllowance: apiData.annualLeaveAllowance || 0,
+        emergencyContactName: apiData.emergencyContactName || '',
+        emergencyContactPhone: apiData.emergencyContactPhone || '',
+        emergencyContactRelation: apiData.emergencyContactRelation || '',
+        isActive: apiData.isActive === undefined ? true : apiData.isActive,
       };
       
-      console.log("Formatlanmış Employee state:", formattedEmployee);
+      console.log("Form için formatlanmış veri:", formattedEmployee);
       setEmployee(formattedEmployee);
       setUploadedDocuments(formattedEmployee.documents?.map(doc => ({...doc})) || []);
       
-      if (relativeImageUrl) {
-        const backendBaseUrl = API_URL.replace('/api', ''); 
-        const fullImageUrl = `${backendBaseUrl}${relativeImageUrl}`;
-        console.log("[EditEmployee - fetch] Setting preview URL to full URL:", fullImageUrl);
-        setProfileImagePreview(fullImageUrl);
-      } else {
-        setProfileImagePreview(null);
-      }
-      
+      fetchDepartments();
     } catch (error) {
-      console.error("Personel verileri alınırken hata:", error);
-      toast.error(`Personel bilgileri yüklenemedi: ${error instanceof Error ? error.message : 'Bilinmeyen hata'}`);
-      router.push('/employees');
+      console.error("Personel verisi alınırken hata:", error);
+      toast.error("Personel bilgileri yüklenirken bir hata oluştu.");
     } finally {
       setLoading(false);
     }
@@ -171,21 +166,21 @@ export default function EditEmployeePage() {
         return;
       }
       
-      const relativeImageUrl = response.employee?.profilePictureUrl;
+      const profilePictureUrl = response.profilePictureUrl;
       
       console.log("[EditEmployee] Profile picture upload successful. Response:", response);
-      console.log("[EditEmployee] Relative image URL from backend:", relativeImageUrl);
+      console.log("[EditEmployee] Profile picture URL from backend:", profilePictureUrl);
       
-      if (relativeImageUrl) {
+      if (profilePictureUrl) {
         const backendBaseUrl = API_URL.replace('/api', ''); 
-        const fullImageUrl = `${backendBaseUrl}${relativeImageUrl}`;
+        const fullImageUrl = `${backendBaseUrl}${profilePictureUrl}`;
         
         console.log("[EditEmployee] Setting preview URL to full URL:", fullImageUrl);
         toast.dismiss(loadingToast);
         setProfileImagePreview(fullImageUrl);
         setProfileImageFile(file);
 
-        setEmployee(prev => prev ? { ...prev, profilePictureUrl: relativeImageUrl } : null); 
+        setEmployee(prev => prev ? { ...prev, profilePictureUrl: profilePictureUrl } : null); 
         
         toast.success("Profil fotoğrafı güncellendi (Kaydetmeyi unutmayın)");
       } else {
@@ -338,11 +333,11 @@ export default function EditEmployeePage() {
           const profileToastId = toast.loading("Profil fotoğrafı yükleniyor...");
           try {
               const response = await uploadProfilePicture(employeeId, profileImageFile);
-              if (!response?.employee?.profilePictureUrl) {
+              if (!response?.profilePictureUrl) {
                 toast.dismiss(profileToastId);
                 uploadErrors.push("Profil fotoğrafı yüklenemedi (URL alınamadı).");
               } else {
-                updatedProfileUrl = response.employee.profilePictureUrl;
+                updatedProfileUrl = response.profilePictureUrl;
                 console.log("Kaydet: Profil fotoğrafı yüklendi, GÖRECELİ URL:", updatedProfileUrl);
                 toast.success("Profil fotoğrafı başarıyla yüklendi.");
                 toast.dismiss(profileToastId);

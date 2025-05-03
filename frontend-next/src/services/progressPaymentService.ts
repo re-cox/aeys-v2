@@ -17,7 +17,7 @@ import {
  */
 export async function getProjectProgressPayments(projectId: string): Promise<ProgressPayment[]> {
   try {
-    const response = await fetch(`/api/progress-payments?projectId=${projectId}`);
+    const response = await fetch(`http://localhost:5001/api/progress-payments?projectId=${projectId}`);
     
     if (!response.ok) {
       throw new Error('Hakediş verileri alınamadı');
@@ -37,7 +37,7 @@ export async function getProjectProgressPayments(projectId: string): Promise<Pro
  */
 export async function getAllProgressPayments(): Promise<ProgressPayment[]> {
   try {
-    const response = await fetch('/api/progress-payments');
+    const response = await fetch('http://localhost:5001/api/progress-payments');
     
     if (!response.ok) {
       throw new Error('Hakediş verileri alınamadı');
@@ -58,7 +58,7 @@ export async function getAllProgressPayments(): Promise<ProgressPayment[]> {
  */
 export async function getProgressPaymentById(id: string): Promise<ProgressPayment> {
   try {
-    const response = await fetch(`/api/progress-payments/${id}`);
+    const response = await fetch(`http://localhost:5001/api/progress-payments/${id}`);
     
     if (!response.ok) {
       throw new Error('Hakediş detayı alınamadı');
@@ -79,7 +79,7 @@ export async function getProgressPaymentById(id: string): Promise<ProgressPaymen
  */
 export async function createProgressPayment(paymentData: ProgressPaymentInput): Promise<ProgressPayment> {
   try {
-    const response = await fetch('/api/progress-payments', {
+    const response = await fetch('http://localhost:5001/api/progress-payments', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -107,7 +107,7 @@ export async function createProgressPayment(paymentData: ProgressPaymentInput): 
  */
 export async function updateProgressPayment(id: string, paymentData: Partial<ProgressPaymentInput>): Promise<ProgressPayment> {
   try {
-    const response = await fetch(`/api/progress-payments/${id}`, {
+    const response = await fetch(`http://localhost:5001/api/progress-payments/${id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -134,7 +134,7 @@ export async function updateProgressPayment(id: string, paymentData: Partial<Pro
  */
 export async function updateProgressPaymentStatus(statusData: ProgressPaymentStatusUpdate): Promise<ProgressPayment> {
   try {
-    const response = await fetch(`/api/progress-payments/${statusData.id}/status`, {
+    const response = await fetch(`http://localhost:5001/api/progress-payments/${statusData.id}/status`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -161,7 +161,7 @@ export async function updateProgressPaymentStatus(statusData: ProgressPaymentSta
  */
 export async function deleteProgressPayment(id: string): Promise<boolean> {
   try {
-    const response = await fetch(`/api/progress-payments/${id}`, {
+    const response = await fetch(`http://localhost:5001/api/progress-payments/${id}`, {
       method: 'DELETE',
     });
     
@@ -183,7 +183,7 @@ export async function deleteProgressPayment(id: string): Promise<boolean> {
  */
 export async function getProjectFinancialSummary(projectId: string): Promise<ProjectFinancialSummary> {
   try {
-    const response = await fetch(`/api/projects/${projectId}/financial-summary`);
+    const response = await fetch(`http://localhost:5001/api/projects/${projectId}/financial-summary`);
     
     if (!response.ok) {
       throw new Error('Proje finansal özeti alınamadı');

@@ -79,9 +79,17 @@ export const getUsers = async (req: Request, res: Response) => {
 // Belirli bir kullanıcıyı getir (ID ile)
 export const getUserById = async (req: Request, res: Response) => {
   const { id } = req.params;
-  console.log(`[Backend User] ID'si ${id} olan kullanıcı isteniyor...`);
+  console.log(`[Backend User] getUserById çağrıldı. ID: ${id}`);
+  console.log(`[Backend User] Request URL: ${req.originalUrl}`);
+  console.log(`[Backend User] Request query: `, req.query);
 
   try {
+    // Önce ID'nin valid mi diye kontrol et
+    if (!id || typeof id !== 'string') {
+      console.error(`[Backend User] Geçersiz ID: ${id}`);
+      return res.status(400).json({ message: 'Geçersiz kullanıcı ID.' });
+    }
+
     const user = await prisma.user.findUnique({
       where: { id },
       select: { // Frontend'in ihtiyaç duyabileceği tüm alanları seç
@@ -573,8 +581,8 @@ export const uploadProfileImage = async (req: Request, res: Response) => {
       where: { id },
       select: { 
         id: true, 
-        firstName: true, 
-        lastName: true,
+        name: true, 
+        surname: true,
         email: true,
         employee: {
           select: {
@@ -635,38 +643,44 @@ export const uploadProfilePicture = async (req: Request, res: Response) => {
       });
     }
     
-    // Eski profil resmini sil (varsa)
+    // Eski profil resmini silmek için kaydı kontrol et
     if (employee.profilePictureUrl) {
-      // URL'den dosya adını çıkar
-      const oldFileName = employee.profilePictureUrl.split('/').pop();
-      if (oldFileName) {
-        const oldFilePath = path.join(__dirname, '../../uploads/profile-pictures', oldFileName);
-        
-        // Dosya varsa sil
-        if (fs.existsSync(oldFilePath)) {
-          fs.unlinkSync(oldFilePath);
-          console.log(`Eski profil resmi silindi: ${oldFilePath}`);
+      try {
+        const oldPicturePath = employee.profilePictureUrl.split('/').pop(); // Dosya adını çıkar
+        if (oldPicturePath) {
+          const fullPath = path.join(__dirname, `../../uploads/profile-pictures/${oldPicturePath}`);
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+            console.log(`Eski profil resmi silindi: ${fullPath}`);
+          }
         }
+      } catch (err) {
+        console.error("Eski profil resmi silinirken hata:", err);
+        // Silme hatası kritik değil, işleme devam et
       }
     }
     
-    // Employee'i güncelle
-    await prisma.employee.update({
+    // Profil resmini güncelle
+    const updatedEmployee = await prisma.employee.update({
       where: { userId: id },
-      data: { profilePictureUrl }
+      data: {
+        profilePictureUrl: profilePictureUrl
+      }
     });
     
-    return res.status(200).json({
+    // Frontend'in beklediği yanıt formatına göre dön
+    return res.status(200).json({ 
       success: true,
-      message: 'Profil resmi başarıyla yüklendi',
-      profilePictureUrl
+      profilePictureUrl: profilePictureUrl,
+      message: 'Profil resmi başarıyla güncellendi.'
     });
   } catch (error) {
     console.error('Profil resmi yükleme hatası:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Profil resmi yüklenirken bir hata oluştu',
-      error: error instanceof Error ? error.message : 'Bilinmeyen hata'
+    const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu';
+    return res.status(500).json({ 
+      success: false, 
+      message: 'Profil resmi güncellenirken bir hata oluştu.', 
+      error: errorMessage 
     });
   }
 };

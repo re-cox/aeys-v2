@@ -299,14 +299,14 @@ export async function PUT(request: NextRequest) {
              if (Object.keys(employeeUpdateData).length > 0) {
                  console.log("Employee güncelleniyor:", JSON.stringify(employeeUpdateData));
                  await tx.employee.update({
-                    where: { id: idParam },
+        where: { id: idParam },
                     data: employeeUpdateData,
                 });
              }
 
             // 4. Güncellenmiş veriyi ilişkilerle birlikte getir
             return tx.employee.findUnique({
-                where: { id: idParam },
+        where: { id: idParam },
                 include: {
                   user: { select: { id: true, name: true, surname: true, email: true, role: { select: { id: true, name: true }} } },
                   department: { select: { id: true, name: true } }

@@ -74,8 +74,15 @@ exports.getUsers = getUsers;
 // Belirli bir kullanıcıyı getir (ID ile)
 const getUserById = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
-    console.log(`[Backend User] ID'si ${id} olan kullanıcı isteniyor...`);
+    console.log(`[Backend User] getUserById çağrıldı. ID: ${id}`);
+    console.log(`[Backend User] Request URL: ${req.originalUrl}`);
+    console.log(`[Backend User] Request query: `, req.query);
     try {
+        // Önce ID'nin valid mi diye kontrol et
+        if (!id || typeof id !== 'string') {
+            console.error(`[Backend User] Geçersiz ID: ${id}`);
+            return res.status(400).json({ message: 'Geçersiz kullanıcı ID.' });
+        }
         const user = yield prisma_1.prisma.user.findUnique({
             where: { id },
             select: {
@@ -147,39 +154,68 @@ const getUserById = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
 });
 exports.getUserById = getUserById;
 /**
+ * Backend User objesini Frontend formatına dönüştürür.
+ */
+const mapUserToFrontendResponse = (user) => {
+    if (!user)
+        return null;
+    return {
+        id: user.id,
+        email: user.email,
+        firstName: user.name, // name -> firstName
+        lastName: user.surname, // surname -> lastName
+        role: user.role ? { id: user.role.id, name: user.role.name } : undefined,
+        employee: user.employee ? {
+            id: user.employee.id,
+            position: user.employee.position,
+            department: user.employee.department ? { id: user.employee.department.id, name: user.employee.department.name } : undefined,
+        } : undefined,
+        createdAt: user.createdAt,
+    };
+};
+/**
  * Yeni bir kullanıcı ve ilişkili personel kaydı oluşturur (Varsayılan "Personel" rolü ile).
  * @route POST /api/users
  * @access Private (Yetkilendirme eklenecek)
  */
-const createUser = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const createUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b, _c;
-    const { email, name, surname, password, departmentId, position, phoneNumber, tcKimlikNo, hireDate, birthDate, address, iban, bloodType, drivingLicense, education, militaryStatus, salary, annualLeaveAllowance, emergencyContactName, emergencyContactPhone, emergencyContactRelation } = req.body;
-    // --- Temel Doğrulamalar ---
-    if (!email || !password || !name) {
-        res.status(400).json({ message: "Eksik alanlar: email, password ve name zorunludur." });
-        return;
+    const { email, firstName, lastName, password, departmentId, position, phoneNumber, tcKimlikNo, hireDate, birthDate, address, iban, bloodType, drivingLicense, education, militaryStatus, salary, annualLeaveAllowance, emergencyContactName, emergencyContactPhone, emergencyContactRelation } = req.body;
+    // Validasyon güncellendi (tcKimlikNo dahil)
+    if (!email || !password || !firstName || !lastName || !departmentId || !position || !tcKimlikNo) {
+        console.error("[Controller] createUser - Eksik zorunlu alanlar:", { email, firstName, lastName, password, departmentId, position, tcKimlikNo });
+        return res.status(400).json({ message: 'İsim, soyisim, e-posta, şifre, departman, pozisyon ve TCKN zorunludur.' });
     }
-    // Varsayılan Rol ID'si ("Personel")
-    const defaultRoleId = "14b9ffbf-e35d-4bcf-944a-3183c6e5844f"; // Personel rolünün ID'si
+    const defaultRoleName = 'Personel'; // Rolü isimle bulacağız
     try {
         const saltRounds = 10;
         const passwordHash = yield bcrypt_1.default.hash(password, saltRounds);
-        const newUser = yield prisma_1.prisma.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
-            // 1. User oluştur
+        const newUserFromDb = yield prisma_1.prisma.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+            // 1. Varsayılan Rolü Bul
+            const defaultRole = yield tx.role.findUnique({
+                where: { name: defaultRoleName },
+                select: { id: true } // Sadece ID'sini alalım
+            });
+            if (!defaultRole) {
+                // Bu kritik bir hata, rol veritabanında olmalı.
+                console.error(`[createUser] Kritik Hata: '${defaultRoleName}' isimli varsayılan rol bulunamadı.`);
+                // Hata fırlatarak transaction'ı geri al
+                throw new Error(`Varsayılan rol '${defaultRoleName}' bulunamadı. Sistem yöneticisi ile iletişime geçin.`);
+            }
+            // 2. User oluştur (Bulunan rol ID'si ile)
             const createdUser = yield tx.user.create({
                 data: {
                     email,
-                    name,
-                    surname,
+                    name: firstName,
+                    surname: lastName,
                     passwordHash,
-                    role: { connect: { id: defaultRoleId } },
+                    role: { connect: { id: defaultRole.id } }, // Dinamik rol ID
                 },
-                select: { id: true }
+                select: { id: true } // Sadece User ID'sini alalım
             });
-            // 2. Employee oluştur ve User'a bağla
-            // departmentId varsa connect ile bağla, yoksa bu alanı hiç ekleme
+            // 3. Employee oluştur ve User'a bağla
             const employeeCreateData = {
-                user: { connect: { id: createdUser.id } },
+                user: { connect: { id: createdUser.id } }, // Oluşturulan User ID
                 position,
                 phoneNumber,
                 tcKimlikNo,
@@ -197,67 +233,56 @@ const createUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
                 emergencyContactPhone,
                 emergencyContactRelation
             };
-            // Departman bağlantısını sadece departmentId varsa ekle
             if (departmentId) {
                 employeeCreateData.department = { connect: { id: departmentId } };
             }
             yield tx.employee.create({ data: employeeCreateData });
-            // 3. Tam User bilgisini (ilişkili Employee bilgileri dahil) geri döndür
+            // 4. Tam User bilgisini geri döndürmek için tekrar sorgula
             return yield tx.user.findUnique({
                 where: { id: createdUser.id },
                 select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    surname: true,
+                    id: true, email: true, name: true, surname: true,
                     role: { select: { id: true, name: true } },
                     employee: {
-                        select: {
-                            id: true, // Employee ID'yi de seçmek faydalı olabilir
-                            position: true,
-                            department: {
-                                select: { id: true, name: true }
-                            }
-                        }
+                        select: { id: true, position: true, department: { select: { id: true, name: true } } }
                     },
                     createdAt: true
                 }
             });
         }));
-        res.status(201).json(newUser);
+        // Map'leme ve Yanıt Gönderme
+        const frontendResponse = mapUserToFrontendResponse(newUserFromDb);
+        if (!frontendResponse) {
+            // Bu durum normalde olmamalı ama bir güvenlik kontrolü
+            console.error("[createUser] Veritabanından gelen kullanıcı map edilemedi.", newUserFromDb);
+            return res.status(500).json({ message: 'Kullanıcı oluşturuldu ancak yanıt işlenemedi.' });
+        }
+        res.status(201).json(frontendResponse);
     }
     catch (error) {
         console.error("Kullanıcı oluşturma hatası:", error);
         if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
             if (error.code === 'P2002') {
-                const target = ((_b = (_a = error.meta) === null || _a === void 0 ? void 0 : _a.target) === null || _b === void 0 ? void 0 : _b.join(', ')) || 'belirtilmemiş alan';
-                // TC Kimlik No için özel mesaj
-                if (target.includes('tcKimlikNo')) {
-                    res.status(409).json({ message: `Bu T.C. Kimlik Numarası zaten kayıtlı.` });
-                    return;
-                }
-                if (target.includes('iban')) {
-                    res.status(409).json({ message: `Bu IBAN zaten kullanımda.` });
-                    return;
-                }
-                res.status(409).json({ message: `Bu ${target.includes('email') ? 'e-posta' : target} zaten kullanımda.` });
-                return;
+                const target = ((_b = (_a = error.meta) === null || _a === void 0 ? void 0 : _a.target) === null || _b === void 0 ? void 0 : _b.join(', ')) || 'alan';
+                return res.status(409).json({ message: `Bu ${target} zaten başka bir kullanıcı tarafından kullanılıyor.` });
             }
             if (error.code === 'P2003' || error.code === 'P2025') {
                 const field = ((_c = error.meta) === null || _c === void 0 ? void 0 : _c.field_name) || 'ilişkili alan';
                 let detailedMessage = `Geçersiz ${field}. İlişkili kayıt bulunamadı.`;
-                // Varsayılan Rol bulunamazsa özel mesaj göster
-                if ((error.code === 'P2025' || error.message.includes('RoleToUser')) && field.includes('role')) {
-                    detailedMessage = `Varsayılan \"Personel\" rolü (ID: ${defaultRoleId}) veritabanında bulunamadı.`;
-                }
-                else if (field.includes('department')) { // Employee üzerindeki departman kontrolü
+                if (field.includes('department')) {
                     detailedMessage = `Seçilen departman bulunamadı.`;
                 }
-                res.status(400).json({ message: detailedMessage });
-                return;
+                // P2025 rol için transaction içinde handle edildi, burada tekrar kontrol etmeye gerek yok
+                return res.status(400).json({ message: detailedMessage });
             }
         }
-        next(error);
+        // Transaction içinden fırlatılan özel rol hatası
+        if (error instanceof Error && error.message.includes("Varsayılan rol")) {
+            // Belki 500 yerine 400 dönmek daha uygun?
+            return res.status(400).json({ message: error.message });
+        }
+        // Diğer tüm hatalar için genel 500
+        res.status(500).json({ message: 'Kullanıcı oluşturulurken bilinmeyen bir sunucu hatası oluştu.' });
     }
 });
 exports.createUser = createUser;
@@ -266,11 +291,11 @@ exports.createUser = createUser;
  * @route PUT /api/users/:id
  * @access Private (Yetkilendirme eklenecek)
  */
-const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+const updateUser = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     var _a, _b;
     const { id } = req.params;
     // Frontend'den gelen Employee partial tipine benzer alanlar
-    const { email, name, surname, departmentId, position, phoneNumber, // Frontend'den phone olarak gelirse burada handle et
+    const { email, firstName, lastName, departmentId, position, phoneNumber, // Frontend'den phone olarak gelirse burada handle et
     tcKimlikNo, // Frontend'den identityNumber olarak gelirse burada handle et
     hireDate, birthDate, address, iban, bloodType, drivingLicense, education, militaryStatus, salary, annualLeaveAllowance, profilePictureUrl, // Frontend'den profileImage olarak gelirse burada handle et
     emergencyContactName, emergencyContactPhone, emergencyContactRelation,
@@ -290,10 +315,10 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
         const userDataToUpdate = {};
         if (email !== undefined)
             userDataToUpdate.email = email;
-        if (name !== undefined)
-            userDataToUpdate.name = name;
-        if (surname !== undefined)
-            userDataToUpdate.surname = surname;
+        if (firstName !== undefined)
+            userDataToUpdate.name = firstName;
+        if (lastName !== undefined)
+            userDataToUpdate.surname = lastName;
         // Şifre ve rol güncellemesi burada yapılmamalı (ayrı/yetkili endpoint)
         const employeeDataToUpdate = {};
         if (position !== undefined)
@@ -344,7 +369,7 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
             }
         }
         // 3. İşlemi Transaction İçinde Gerçekleştir
-        const updatedUser = yield prisma_1.prisma.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+        const updatedUserFromDb = yield prisma_1.prisma.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
             // User verisini güncelle (eğer güncellenecek alan varsa)
             if (Object.keys(userDataToUpdate).length > 0) {
                 yield tx.user.update({ where: { id }, data: userDataToUpdate });
@@ -363,15 +388,20 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
                 // Şimdilik sadece var olanı güncelliyoruz.
                 console.warn(`[Backend User Update] User ID ${id} için Employee kaydı bulunamadı, güncelleme atlandı.`);
             }
-            // Güncellenmiş tam kullanıcı verisini geri döndür (getUserById'daki gibi)
+            // Veritabanından name/surname ile tam veriyi al
             return yield tx.user.findUnique({
                 where: { id },
                 select: {
-                    id: true, email: true, name: true, surname: true, roleId: true, createdAt: true, updatedAt: true,
+                    id: true, email: true, name: true, surname: true,
+                    roleId: true, createdAt: true, updatedAt: true,
                     role: { select: { name: true, permissions: true } },
                     employee: {
                         select: {
-                            id: true, position: true, phoneNumber: true, tcKimlikNo: true, hireDate: true, birthDate: true, address: true, iban: true, bloodType: true, drivingLicense: true, education: true, militaryStatus: true, salary: true, annualLeaveAllowance: true, profilePictureUrl: true, departmentId: true,
+                            id: true, position: true, phoneNumber: true, tcKimlikNo: true,
+                            hireDate: true, birthDate: true, address: true, iban: true,
+                            bloodType: true, drivingLicense: true, education: true,
+                            militaryStatus: true, salary: true, annualLeaveAllowance: true,
+                            profilePictureUrl: true, departmentId: true,
                             department: { select: { id: true, name: true } },
                             emergencyContactName: true, emergencyContactPhone: true, emergencyContactRelation: true,
                             documents: { select: { id: true, name: true, url: true, type: true, size: true, uploadDate: true }, orderBy: { uploadDate: 'desc' } }
@@ -380,11 +410,16 @@ const updateUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
                 }
             });
         }));
-        console.log(`[Backend User] ID'si ${id} olan kullanıcı başarıyla güncellendi.`);
-        res.status(200).json(updatedUser);
+        const frontendResponse = mapUserToFrontendResponse(updatedUserFromDb);
+        if (!frontendResponse) {
+            console.error("[updateUser] Veritabanından gelen kullanıcı map edilemedi.", updatedUserFromDb);
+            return res.status(500).json({ message: 'Kullanıcı güncellendi ancak yanıt işlenemedi.' });
+        }
+        console.log(`[Backend User Update] ID ${id} başarıyla güncellendi.`);
+        res.status(200).json(frontendResponse);
     }
     catch (error) {
-        console.error(`[Backend User] Kullanıcı ${id} güncelleme hatası:`, error);
+        console.error(`[Backend User Update] Kullanıcı ${id} güncelleme hatası:`, error);
         if (error instanceof client_1.Prisma.PrismaClientKnownRequestError) {
             // Unique constraint hatası (örn: email zaten kullanılıyor)
             if (error.code === 'P2002') {
@@ -487,6 +522,7 @@ const uploadProfileImage = (req, res) => __awaiter(void 0, void 0, void 0, funct
             select: {
                 id: true,
                 name: true,
+                surname: true,
                 email: true,
                 employee: {
                     select: {
@@ -541,36 +577,44 @@ const uploadProfilePicture = (req, res) => __awaiter(void 0, void 0, void 0, fun
                 message: 'Kullanıcı için personel kaydı bulunamadı.'
             });
         }
-        // Eski profil resmini sil (varsa)
+        // Eski profil resmini silmek için kaydı kontrol et
         if (employee.profilePictureUrl) {
-            // URL'den dosya adını çıkar
-            const oldFileName = employee.profilePictureUrl.split('/').pop();
-            if (oldFileName) {
-                const oldFilePath = path_1.default.join(__dirname, '../../uploads/profile-pictures', oldFileName);
-                // Dosya varsa sil
-                if (fs_1.default.existsSync(oldFilePath)) {
-                    fs_1.default.unlinkSync(oldFilePath);
-                    console.log(`Eski profil resmi silindi: ${oldFilePath}`);
+            try {
+                const oldPicturePath = employee.profilePictureUrl.split('/').pop(); // Dosya adını çıkar
+                if (oldPicturePath) {
+                    const fullPath = path_1.default.join(__dirname, `../../uploads/profile-pictures/${oldPicturePath}`);
+                    if (fs_1.default.existsSync(fullPath)) {
+                        fs_1.default.unlinkSync(fullPath);
+                        console.log(`Eski profil resmi silindi: ${fullPath}`);
+                    }
                 }
             }
+            catch (err) {
+                console.error("Eski profil resmi silinirken hata:", err);
+                // Silme hatası kritik değil, işleme devam et
+            }
         }
-        // Employee'i güncelle
-        yield prisma_1.prisma.employee.update({
+        // Profil resmini güncelle
+        const updatedEmployee = yield prisma_1.prisma.employee.update({
             where: { userId: id },
-            data: { profilePictureUrl }
+            data: {
+                profilePictureUrl: profilePictureUrl
+            }
         });
+        // Frontend'in beklediği yanıt formatına göre dön
         return res.status(200).json({
             success: true,
-            message: 'Profil resmi başarıyla yüklendi',
-            profilePictureUrl
+            profilePictureUrl: profilePictureUrl,
+            message: 'Profil resmi başarıyla güncellendi.'
         });
     }
     catch (error) {
         console.error('Profil resmi yükleme hatası:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Bilinmeyen bir hata oluştu';
         return res.status(500).json({
             success: false,
-            message: 'Profil resmi yüklenirken bir hata oluştu',
-            error: error instanceof Error ? error.message : 'Bilinmeyen hata'
+            message: 'Profil resmi güncellenirken bir hata oluştu.',
+            error: errorMessage
         });
     }
 });
@@ -645,4 +689,5 @@ const deleteUser = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
     }
 });
 exports.deleteUser = deleteUser;
+// Kullanıcı oluşturma/güncelleme/silme fonksiyonları da buraya eklenebilir 
 // Kullanıcı oluşturma/güncelleme/silme fonksiyonları da buraya eklenebilir 

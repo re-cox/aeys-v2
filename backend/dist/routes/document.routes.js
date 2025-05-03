@@ -13,194 +13,88 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
-const client_1 = require("@prisma/client");
+const document_controller_1 = require("../controllers/document.controller");
 const auth_middleware_1 = require("../middlewares/auth.middleware");
-const errorHandler_1 = __importDefault(require("../utils/errorHandler"));
-const router = express_1.default.Router();
+const multer_1 = __importDefault(require("multer"));
+const path_1 = __importDefault(require("path"));
+const fs_1 = __importDefault(require("fs"));
+const uuid_1 = require("uuid");
+const client_1 = require("@prisma/client");
 const prisma = new client_1.PrismaClient();
-/**
- * @route GET /api/documents
- * @desc Tüm dokümanları listele (filtreleme seçenekli)
- * @access Private
- */
-router.get('/', auth_middleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const router = express_1.default.Router();
+// Tüm rotalar için kimlik doğrulama gerekli
+router.use(auth_middleware_1.authenticate);
+// Yükleme dizinini oluştur
+const uploadDir = path_1.default.join(__dirname, '../../uploads');
+if (!fs_1.default.existsSync(uploadDir)) {
+    fs_1.default.mkdirSync(uploadDir, { recursive: true });
+}
+// Multer konfigürasyonu
+const storage = multer_1.default.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, uploadDir);
+    },
+    filename: function (req, file, cb) {
+        const uniqueFileName = `${(0, uuid_1.v4)()}${path_1.default.extname(file.originalname)}`;
+        cb(null, uniqueFileName);
+    }
+});
+// Dosya boyutu sınırı: 50MB
+const upload = (0, multer_1.default)({
+    storage: storage,
+    limits: { fileSize: 50 * 1024 * 1024 },
+    fileFilter: (req, file, cb) => {
+        // Tüm dosya türlerine izin ver, gerekirse burada filtreleme yapılabilir
+        cb(null, true);
+    }
+});
+// GET /api/documents
+router.get('/', document_controller_1.getAllDocuments);
+// GET /api/documents/:id
+router.get('/:id', document_controller_1.getDocumentById);
+// POST /api/documents
+router.post('/', document_controller_1.createDocument);
+// PUT /api/documents/:id
+router.put('/:id', document_controller_1.updateDocument);
+// DELETE /api/documents/:id
+router.delete('/:id', document_controller_1.deleteDocument);
+// GET /api/documents/:id/download
+router.get('/:id/download', document_controller_1.downloadDocument);
+// POST /api/documents/upload - Doküman yükleme endpoint'i
+router.post('/upload', upload.single('file'), (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { search, folderId } = req.query;
-        // Filtreleme koşulları
-        const where = {};
-        if (search) {
-            where.OR = [
-                { name: { contains: search, mode: 'insensitive' } },
-                { description: { contains: search, mode: 'insensitive' } },
-            ];
+        if (!req.file) {
+            return res.status(400).json({ error: 'Yüklenecek dosya bulunamadı' });
         }
-        if (folderId === 'root' || folderId === 'null') {
-            // Kök klasördeki dokümanlar (folderId null olanlar)
-            where.folderId = null;
-        }
-        else if (folderId) {
-            // Belirli bir klasördeki dokümanlar
-            where.folderId = folderId;
-        }
-        const documents = yield prisma.document.findMany({
-            where,
-            orderBy: {
-                updatedAt: 'desc',
-            },
-            include: {
-                createdBy: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                    },
-                },
-            },
-        });
-        return res.json({
-            success: true,
-            data: documents,
-            count: documents.length
-        });
-    }
-    catch (error) {
-        return (0, errorHandler_1.default)(error, req, res);
-    }
-}));
-/**
- * @route GET /api/documents/:id
- * @desc Belirli bir dokümanı getir
- * @access Private
- */
-router.get('/:id', auth_middleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        const document = yield prisma.document.findUnique({
-            where: { id },
-            include: {
-                createdBy: {
-                    select: {
-                        id: true,
-                        name: true,
-                        email: true,
-                    },
-                },
-            },
-        });
-        if (!document) {
-            return res.status(404).json({ error: 'Doküman bulunamadı' });
-        }
-        return res.json({
-            success: true,
-            data: document
-        });
-    }
-    catch (error) {
-        return (0, errorHandler_1.default)(error, req, res);
-    }
-}));
-/**
- * @route POST /api/documents
- * @desc Yeni bir doküman oluştur
- * @access Private
- */
-router.post('/', auth_middleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { name, description, content, fileUrl, folderId, type, size, mimeType } = req.body;
-        if (!name) {
-            return res.status(400).json({ error: 'Doküman adı gereklidir' });
-        }
-        // Kullanıcı id'sini request'ten al
+        // Kullanıcı bilgilerini al
         const userId = req.user.id;
+        // Dosya URL'ini oluştur
+        const fileUrl = `/uploads/${req.file.filename}`;
+        // Form verilerinden diğer bilgileri al
+        const { name, description, category, folderId } = req.body;
+        // Doküman veritabanı kaydını oluştur
         const document = yield prisma.document.create({
             data: {
-                name,
+                name: name || req.file.originalname,
                 description: description || '',
-                content: content || '',
-                fileUrl: fileUrl || null,
-                folderId: folderId === 'null' ? null : folderId || null,
-                type: type || 'text',
-                size: size || 0,
-                mimeType: mimeType || 'text/plain',
-                createdById: userId,
-            },
+                fileUrl,
+                type: 'file',
+                size: req.file.size,
+                mimeType: req.file.mimetype,
+                category: category || null,
+                folderId: folderId === 'root' ? null : folderId || null,
+                createdById: userId
+            }
         });
-        return res.status(201).json({
-            success: true,
-            data: document
-        });
+        console.log(`[Document API] Doküman yüklendi: ${name || req.file.originalname}, URL: ${fileUrl}`);
+        return res.status(201).json(document);
     }
     catch (error) {
-        return (0, errorHandler_1.default)(error, req, res);
-    }
-}));
-/**
- * @route PUT /api/documents/:id
- * @desc Dokümanı güncelle
- * @access Private
- */
-router.put('/:id', auth_middleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        const { name, description, content, fileUrl, folderId, type, size, mimeType } = req.body;
-        if (!name) {
-            return res.status(400).json({ error: 'Doküman adı gereklidir' });
-        }
-        // Dokümanın var olup olmadığını kontrol et
-        const existingDocument = yield prisma.document.findUnique({
-            where: { id },
+        console.error('[Document API] Doküman yükleme hatası:', error);
+        return res.status(500).json({
+            error: 'Doküman yüklenirken bir hata oluştu',
+            details: error instanceof Error ? error.message : 'Bilinmeyen hata'
         });
-        if (!existingDocument) {
-            return res.status(404).json({ error: 'Doküman bulunamadı' });
-        }
-        const document = yield prisma.document.update({
-            where: { id },
-            data: {
-                name,
-                description: description || existingDocument.description,
-                content: content !== undefined ? content : existingDocument.content,
-                fileUrl: fileUrl !== undefined ? fileUrl : existingDocument.fileUrl,
-                folderId: folderId === 'null' ? null : (folderId || existingDocument.folderId),
-                type: type || existingDocument.type,
-                size: size || existingDocument.size,
-                mimeType: mimeType || existingDocument.mimeType,
-                updatedAt: new Date(),
-            },
-        });
-        return res.json({
-            success: true,
-            data: document
-        });
-    }
-    catch (error) {
-        return (0, errorHandler_1.default)(error, req, res);
-    }
-}));
-/**
- * @route DELETE /api/documents/:id
- * @desc Dokümanı sil
- * @access Private
- */
-router.delete('/:id', auth_middleware_1.authenticate, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    try {
-        const { id } = req.params;
-        // Dokümanın var olup olmadığını kontrol et
-        const existingDocument = yield prisma.document.findUnique({
-            where: { id },
-        });
-        if (!existingDocument) {
-            return res.status(404).json({ error: 'Doküman bulunamadı' });
-        }
-        yield prisma.document.delete({
-            where: { id },
-        });
-        return res.json({
-            success: true,
-            message: 'Doküman başarıyla silindi'
-        });
-    }
-    catch (error) {
-        return (0, errorHandler_1.default)(error, req, res);
     }
 }));
 exports.default = router;
