@@ -4,7 +4,7 @@ import fs from 'fs';
 
 // Yükleme klasörlerinin yolları
 const UPLOAD_DIRS = {
-    profile: path.join(__dirname, '../../uploads/profile'),
+    profile: path.join(__dirname, '../../uploads/profile-pictures'),
     documents: path.join(__dirname, '../../uploads/documents'),
     // Gerekirse diğer tipler için de eklenebilir
 };

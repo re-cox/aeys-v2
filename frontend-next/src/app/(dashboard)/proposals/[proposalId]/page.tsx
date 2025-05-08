@@ -80,10 +80,10 @@ export default function ProposalDetailPage() {
 
   const handleDelete = async () => {
     if (!proposal) return;
-    if (!confirm(`"${proposal.title}" teklifini silmek istediğinizden emin misiniz?`)) return;
+    if (!confirm(`"${proposal.proposalNo}" numaralı teklifi silmek istediğinizden emin misiniz?`)) return;
     try {
       await deleteProposal(proposal.id);
-      toast.success(`"${proposal.title}" teklifi başarıyla silindi.`);
+      toast.success(`"${proposal.proposalNo}" numaralı teklif başarıyla silindi.`);
       router.push('/proposals'); 
     } catch (err) {
       let errorMessage = "Teklif silinemedi.";
@@ -142,9 +142,9 @@ export default function ProposalDetailPage() {
                 </Button>
                 <h1 className="text-2xl font-bold tracking-tight flex items-center">
                    <FileText className="mr-3 h-7 w-7 text-primary"/>
-                   {proposal.title}
+                   {proposal.proposalNo}
                 </h1>
-                <p className="text-muted-foreground mt-1">Teklif No: {proposal.proposalNumber}</p>
+                <p className="text-muted-foreground mt-1">Teklif No: {proposal.proposalNo}</p>
             </div>
             <div className="flex gap-2 mt-2 sm:mt-0">
                  <TooltipProvider>
@@ -204,11 +204,15 @@ export default function ProposalDetailPage() {
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <div className="font-medium">
-                     <Link href={`/customers/${proposal.customer.id}`} className="flex items-center hover:underline">
-                        <Building className="mr-2 h-4 w-4 text-muted-foreground"/> {proposal.customer.companyName}
-                    </Link>
+                     {proposal.customer ? (
+                        <Link href={`/customers/${proposal.customer.id}`} className="flex items-center hover:underline">
+                           <Building className="mr-2 h-4 w-4 text-muted-foreground"/> 
+                           {proposal.customer.name}
+                       </Link>
+                     ) : (
+                        <span className="text-muted-foreground italic">Müşteri bilgisi yok</span>
+                     )}
                   </div>
-                  {/* Müşteri detayları API'den geliyorsa eklenebilir */} 
                 </CardContent>
               </Card>
           </div>

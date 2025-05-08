@@ -259,15 +259,15 @@ export async function createEmployee(
 
 /**
  * Personel bilgilerini günceller (Backend API'sine gönderir)
- * Backend endpoint: PUT /api/users/:id
+ * Backend endpoint: PUT /api/employees/:id
  * Dönen tip BackendEmployeeWithUser (güncelleme sonrası tam veri döner varsayımı)
  */
 export async function updateEmployee(id: string, employeeData: UpdateEmployeePayload): Promise<BackendEmployeeWithUser | null> { 
   const context = `Personel Güncelle (ID: ${id})`;
-  console.log(`[employeeService] updateEmployee çağrıldı (ID: ${id}) - Backend endpoint PUT /api/users/${id}`);
+  console.log(`[employeeService] updateEmployee çağrıldı (ID: ${id}) - Backend endpoint PUT /api/employees/${id}`);
   console.log("[employeeService] Personel güncelleme isteği gönderiliyor:", JSON.stringify(employeeData, null, 2));
   try {
-    const response = await apiClient.put<BackendEmployeeWithUser>(`/users/${id}`, employeeData); 
+    const response = await apiClient.put<BackendEmployeeWithUser>(`/employees/${id}`, employeeData); 
     console.log("[employeeService] Personel başarıyla güncellendi, Backend yanıtı:", response.data);
     return response.data;
   } catch (error) {
@@ -279,13 +279,13 @@ export async function updateEmployee(id: string, employeeData: UpdateEmployeePay
 
 /**
  * Personel siler
- * Backend endpoint: DELETE /api/users/:id
+ * Backend endpoint: DELETE /api/employees/:id
  */
 export async function deleteEmployee(id: string): Promise<boolean> {
   const context = `Personel Sil (ID: ${id})`;
-  console.log(`[employeeService] deleteEmployee çağrıldı (ID: ${id}) - Backend endpoint DELETE /api/users/${id}`);
+  console.log(`[employeeService] deleteEmployee çağrıldı (ID: ${id}) - Backend endpoint DELETE /api/employees/${id}`);
   try {
-    await apiClient.delete(`/users/${id}`);
+    await apiClient.delete(`/employees/${id}`);
     console.log(`[employeeService] Personel (ID: ${id}) başarıyla silindi.`);
     return true;
   } catch (error) {
@@ -300,7 +300,7 @@ export async function deleteEmployee(id: string): Promise<boolean> {
 
 /**
  * Profil resmini yükler (Backend API'sine gönderir)
- * Backend endpoint: POST /api/users/:userId/profile-picture
+ * Backend endpoint: POST /api/employees/:userId/profile-picture
  * @param userId Profil resminin ait olduğu kullanıcının ID'si
  * @param file Yüklenecek resim dosyası
  * @returns Yüklenen resmin URL'i
@@ -312,9 +312,9 @@ export async function uploadProfilePicture(userId: string, file: File): Promise<
   formData.append('profilePicture', file);
 
   try {
-    // Endpoint: /users/:userId/profile-picture 
+    // Endpoint: /employees/:userId/profile-picture 
     const response = await apiClient.post<{ success: boolean, profilePictureUrl: string, message: string }>(
-      `/users/${userId}/profile-picture`, 
+      `/employees/${userId}/profile-picture`, 
       formData, 
       {
         headers: {

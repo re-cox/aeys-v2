@@ -90,7 +90,7 @@ router.get('/requests', (req, res) => __awaiter(void 0, void 0, void 0, function
         // Yanıtı dönüştürerek requester.name ve requester.surname alanlarını ekleyebiliriz (opsiyonel)
         const formattedRequests = purchaseRequests.map(req => {
             var _a, _b, _c, _d;
-            return (Object.assign(Object.assign({}, req), { requesterName: `${((_b = (_a = req.requester) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.name) || ''} ${((_d = (_c = req.requester) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.surname) || ''}`.trim(), requester: undefined }));
+            return (Object.assign(Object.assign({}, req), { requesterName: `${((_b = (_a = req.requester) === null || _a === void 0 ? void 0 : _a.user) === null || _b === void 0 ? void 0 : _b.name) || ''} ${((_d = (_c = req.requester) === null || _c === void 0 ? void 0 : _c.user) === null || _d === void 0 ? void 0 : _d.surname) || ''}`.trim() }));
         });
         res.json({ success: true, data: formattedRequests }); // Dönüştürülmüş veriyi gönder
     }
@@ -203,8 +203,8 @@ router.get('/requests/:id', (req, res) => __awaiter(void 0, void 0, void 0, func
             where: { id },
             include: {
                 department: { select: { id: true, name: true } },
-                requester: { select: { id: true, name: true, surname: true, email: true } },
-                statusChangedBy: { select: { id: true, name: true, surname: true } },
+                requester: { select: { id: true, user: { select: { name: true, surname: true, email: true } } } },
+                statusChangedBy: { select: { id: true, user: { select: { name: true, surname: true } } } },
                 items: true, // Tüm kalem detayları
             },
         });
@@ -297,8 +297,8 @@ router.put('/requests/:id/status', (req, res) => __awaiter(void 0, void 0, void 
             },
             include: {
                 department: { select: { id: true, name: true } },
-                requester: { select: { id: true, name: true, surname: true } },
-                statusChangedBy: { select: { id: true, name: true, surname: true } },
+                requester: { select: { id: true, user: { select: { name: true, surname: true } } } },
+                statusChangedBy: { select: { id: true, user: { select: { name: true, surname: true } } } },
             }
         });
         console.log(`[Purchasing API] ID: ${id} talebinin durumu başarıyla güncellendi.`);

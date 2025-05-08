@@ -1,6 +1,6 @@
 import React from 'react';
 import TeknisyenRaporForm from '@/components/teknisyenraporlari/TeknisyenRaporForm';
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { ArrowLeft } from 'lucide-react';
@@ -16,6 +16,10 @@ const YeniTeknisyenRaporuPage = () => {
        <Card className="max-w-4xl mx-auto">
          <CardHeader>
            <CardTitle>Yeni Teknisyen Raporu Oluştur</CardTitle>
+           <CardDescription>
+             Lütfen rapor bilgilerini ve Rapor Bilgi Numarasını girin. 
+             Rapor Bilgi Numarası, raporun benzersiz tanımlayıcısıdır.
+           </CardDescription>
          </CardHeader>
          <CardContent>
             {/* Formu reportId olmadan çağırarak oluşturma modunu belirtiyoruz */}

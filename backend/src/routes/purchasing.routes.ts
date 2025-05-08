@@ -82,7 +82,6 @@ router.get('/requests', async (req: Request, res: Response) => {
     const formattedRequests = purchaseRequests.map(req => ({
       ...req,
       requesterName: `${req.requester?.user?.name || ''} ${req.requester?.user?.surname || ''}`.trim(),
-      requester: undefined, // Orijinal requester objesini kaldırmak için
     }));
 
     res.json({ success: true, data: formattedRequests }); // Dönüştürülmüş veriyi gönder
@@ -190,7 +189,7 @@ router.post('/requests', async (req: Request, res: Response) => {
         return res.status(409).json({
             success: false,
             message: 'Benzersiz alan çakışması.',
-            error: `Alan(lar): ${error.meta?.target?.join(', ')}`
+            error: `Alan(lar): ${(error.meta?.target as string[])?.join(', ')}`
         });
     }
     res.status(500).json({ success: false, message: "Talep oluşturulurken bir sunucu hatası oluştu.", error: error.message });
@@ -208,8 +207,8 @@ router.get('/requests/:id', async (req: Request, res: Response) => {
       where: { id },
       include: {
         department: { select: { id: true, name: true } },
-        requester: { select: { id: true, name: true, surname: true, email: true } },
-        statusChangedBy: { select: { id: true, name: true, surname: true } },
+        requester: { select: { id: true, user: { select: { name: true, surname: true, email: true } } } },
+        statusChangedBy: { select: { id: true, user: { select: { name: true, surname: true } } } },
         items: true, // Tüm kalem detayları
       },
     });
@@ -319,8 +318,8 @@ router.put('/requests/:id/status', async (req: Request, res: Response) => {
             },
             include: { // Güncellenmiş talebi döndür
                 department: { select: { id: true, name: true } },
-                requester: { select: { id: true, name: true, surname: true } },
-                statusChangedBy: { select: { id: true, name: true, surname: true } },
+                requester: { select: { id: true, user: { select: { name: true, surname: true } } } },
+                statusChangedBy: { select: { id: true, user: { select: { name: true, surname: true } } } },
             }
         });
 

@@ -15,58 +15,39 @@ export async function GET(
     const project = await prisma.project.findUnique({
       where: { id },
       include: {
-        manager: { // Include manager details
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            profilePictureUrl: true,
-          },
-        },
-        team: { // Include team members and their employee details
-          include: {
-            employee: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                profilePictureUrl: true,
-              },
-            },
-          },
-        },
-        tasks: { // Include related tasks
+        Department: true,
+        Customer: true,
+        Site: true,
+        tasks: { 
           orderBy: {
             createdAt: 'desc',
           },
-          include: {
-            assignees: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-              },
-            },
-          },
         },
-        files: { // Include related files
-          orderBy: {
-            uploadedAt: 'desc',
-          },
-          include: { // Optionally include who uploaded the file
-            uploadedBy: {
-              select: { id: true, name: true }
-            }
+        // Select fields based on the updated Prisma schema
+        Document: {
+          select: {
+            id: true,
+            name: true,         // Use 'name' instead of 'title'
+            description: true,
+            fileUrl: true,
+            mimeType: true,     // Use 'mimeType' instead of 'fileType'
+            size: true,         // Use 'size' instead of 'fileSize'
+            // version: true,    // Removed from schema
+            projectId: true,
+            customerId: true,
+            createdById: true,  // Use 'createdById' instead of 'uploadedById'
+            createdAt: true,
+            updatedAt: true,
+            // uploadedBy: { select: { id: true, name: true } } // Select user if needed
           }
         },
-        photos: { // Include related photos
-          orderBy: {
-            uploadedAt: 'desc',
-          },
-          include: { // Optionally include who uploaded the photo
-            uploadedBy: {
-              select: { id: true, name: true }
-            }
+        // Explicitly select fields for TeknisyenRapor
+        TeknisyenRapor: {
+          select: {
+            id: true,
+            baslik: true,
+            durum: true,
+            tarih: true,
           }
         },
       },
@@ -96,66 +77,71 @@ export async function PUT(
 
   try {
     const body = await request.json();
-    const { name, description, status, priority, startDate, endDate, actualEndDate, budget, progress, managerId, teamMembers } = body;
+    const { name, description, status, startDate, endDate, budget, departmentId, customerId, siteId } = body;
 
     // Basic validation
     if (!name) {
         return NextResponse.json({ success: false, message: 'Proje adı zorunludur.' }, { status: 400 });
     }
+    if (!departmentId) {
+        // Department is mandatory based on schema
+        return NextResponse.json({ success: false, message: 'Departman zorunludur.' }, { status: 400 });
+    }
 
-    // TODO: Add validation for managerId existence in Employee table
-    // TODO: Add validation for teamMembers IDs existence in Employee table
-
-    // Handle team members update (delete existing, create new ones)
-    // This is a simple approach; more sophisticated logic might be needed for complex updates.
+    // Update project data
     const updateData: Prisma.ProjectUpdateInput = {
         name,
         description,
         status,
-        priority,
-        startDate: startDate ? new Date(startDate) : null,
-        endDate: endDate ? new Date(endDate) : null,
-        actualEndDate: actualEndDate ? new Date(actualEndDate) : null,
+        startDate: startDate ? new Date(startDate) : undefined,
+        endDate: endDate ? new Date(endDate) : undefined,
         budget,
-        progress: progress !== undefined ? parseInt(progress, 10) : undefined,
-        managerId,
+        // Connect relations only if valid IDs are provided
+        Department: { connect: { id: departmentId } }, // Department is mandatory
     };
 
-    const updatedProject = await prisma.$transaction(async (tx) => {
-        // 1. Update project base data
-        const project = await tx.project.update({
-            where: { id },
-            data: updateData,
-        });
+    if (customerId) {
+      updateData.Customer = { connect: { id: customerId } };
+    }
+    if (siteId) {
+      updateData.Site = { connect: { id: siteId } };
+    }
 
-        // 2. Update team members if provided
-        if (teamMembers !== undefined) {
-            // Delete existing team members for this project
-            await tx.projectTeamMember.deleteMany({ where: { projectId: id } });
-
-            // Add new team members if the array is not empty
-            if (Array.isArray(teamMembers) && teamMembers.length > 0) {
-                await tx.projectTeamMember.createMany({
-                    data: teamMembers.map((member: { employeeId: string; role?: string }) => ({
-                        projectId: id,
-                        employeeId: member.employeeId,
-                        role: member.role,
-                    })),
-                });
-            }
-        }
-
-        // 3. Fetch the updated project with relations to return
-        return tx.project.findUnique({
-             where: { id },
-             include: {
-                 manager: true,
-                 team: { include: { employee: true } },
-                 tasks: true,
-                 files: true,
-                 photos: true,
-             }
-         });
+    const updatedProject = await prisma.project.update({
+        where: { id },
+        data: updateData,
+        include: {
+            Department: true,
+            Customer: true,
+            Site: true,
+            tasks: true,
+            // Select fields based on the updated Prisma schema
+            Document: {
+              select: {
+                id: true,
+                name: true,         // Use 'name' instead of 'title'
+                description: true,
+                fileUrl: true,
+                mimeType: true,     // Use 'mimeType' instead of 'fileType'
+                size: true,         // Use 'size' instead of 'fileSize'
+                // version: true,    // Removed from schema
+                projectId: true,
+                customerId: true,
+                createdById: true,  // Use 'createdById' instead of 'uploadedById'
+                createdAt: true,
+                updatedAt: true,
+              }
+            },
+             // Explicitly select fields for TeknisyenRapor in update response (if needed)
+             TeknisyenRapor: {
+                select: {
+                  id: true,
+                  baslik: true,
+                  durum: true,
+                  tarih: true,
+                }
+            },
+        },
     });
 
     return NextResponse.json({ success: true, data: updatedProject });
@@ -170,7 +156,7 @@ export async function PUT(
             errorMessage = `Bu isimde bir proje zaten mevcut: ${error.meta?.target}`;
             statusCode = 409; // Conflict
        } else if (error.code === 'P2003') { // Foreign key constraint failed
-            errorMessage = 'Geçersiz yönetici veya ekip üyesi IDsi sağlandı.';
+            errorMessage = 'Geçersiz bölüm, müşteri veya site bilgisi.';
             statusCode = 400; // Bad Request
        } else if (error.code === 'P2025') { // Record to update not found
              errorMessage = 'Güncellenecek proje bulunamadı.';
@@ -193,37 +179,11 @@ export async function DELETE(
   const { id } = params;
 
   try {
-    // Optional: Before deleting the project, delete associated files/photos from storage
-    const project = await prisma.project.findUnique({
-        where: { id },
-        include: { files: true, photos: true }
-    });
+    // Consider cascading deletes in Prisma schema instead of manual deletion
+    // await prisma.document.deleteMany({ where: { projectId: id } });
+    // await prisma.teknisyenRapor.deleteMany({ where: { projeId: id } }); // Also TeknisyenRapor if needed
+    // await prisma.task.deleteMany({ where: { projectId: id } }); // Also Tasks
 
-    if (project) {
-      // Delete files from filesystem
-      for (const file of project.files) {
-          try {
-              const filePath = path.join(process.cwd(), 'public', file.path);
-              await fs.unlink(filePath);
-              console.log(`Deleted project file: ${filePath}`);
-          } catch (fileError) {
-              console.error(`Error deleting file ${file.path}:`, fileError);
-              // Decide if you want to stop the process or just log the error
-          }
-      }
-        // Delete photos from filesystem
-      for (const photo of project.photos) {
-          try {
-              const photoPath = path.join(process.cwd(), 'public', photo.path);
-              await fs.unlink(photoPath);
-               console.log(`Deleted project photo: ${photoPath}`);
-          } catch (photoError) {
-              console.error(`Error deleting photo ${photo.path}:`, photoError);
-          }
-      }
-    }
-
-    // Delete the project (relations like team members, files, photos, tasks might be handled by cascade delete or set null based on schema)
     await prisma.project.delete({
       where: { id },
     });
@@ -239,6 +199,7 @@ export async function DELETE(
              errorMessage = 'Silinecek proje bulunamadı.';
              statusCode = 404;
          } else {
+             // Handle other potential errors like foreign key constraints if cascade delete is not set up
              errorMessage = `Veritabanı hatası: ${error.message}`;
          }
     } else if (error instanceof Error) {
@@ -253,7 +214,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
     try {
         const projectId = params.id;
         const body = await request.json();
-        const { name, description, status, priority, startDate, endDate, actualEndDate, budget, progress, managerId } = body;
+        const { name, description, status, startDate, endDate, budget, departmentId, customerId, siteId } = body;
         
         // Validation
         if (projectId === undefined) {
@@ -276,46 +237,62 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         if (name !== undefined) updateData.name = name;
         if (description !== undefined) updateData.description = description;
         if (status !== undefined) updateData.status = status;
-        if (priority !== undefined) updateData.priority = priority;
-        if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : null;
-        if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : null;
-        if (actualEndDate !== undefined) updateData.actualEndDate = actualEndDate ? new Date(actualEndDate) : null;
+        if (startDate !== undefined) updateData.startDate = startDate ? new Date(startDate) : undefined;
+        if (endDate !== undefined) updateData.endDate = endDate ? new Date(endDate) : undefined;
         if (budget !== undefined) updateData.budget = budget;
-        if (progress !== undefined) updateData.progress = progress;
         
-        // Handle managerId separately
-        if (managerId !== undefined) {
-            if (managerId) {
-                // Check if employee exists
-                const manager = await prisma.employee.findUnique({
-                    where: { id: managerId }
-                });
-                
-                if (!manager) {
-                    return NextResponse.json({ 
-                        success: false, 
-                        message: `Geçersiz yönetici ID'si: ${managerId}. Bu ID'ye sahip çalışan bulunamadı.` 
-                    }, { status: 400 });
-                }
-                
-                updateData.manager = { connect: { id: managerId } };
-            } else {
-                // If managerId is empty string or null, disconnect the manager
-                updateData.manager = { disconnect: true };
-            }
+        // Handle relations: Only connect if a valid ID is provided
+        if (departmentId) {
+            updateData.Department = { connect: { id: departmentId } };
+        } // If departmentId is null/undefined/empty, do nothing (don't update)
+        
+        if (customerId) {
+             updateData.Customer = { connect: { id: customerId } };
+        } // If customerId is null/undefined/empty, do nothing
+        
+        if (siteId) {
+            updateData.Site = { connect: { id: siteId } };
+        } // If siteId is null/undefined/empty, do nothing
+        
+        // Update project only if there is data to update
+        if (Object.keys(updateData).length === 0) {
+            return NextResponse.json({ success: true, message: 'Güncellenecek veri yok.', data: existingProject });
         }
-        
-        // Update project
+
         const updatedProject = await prisma.project.update({
             where: { id: projectId },
             data: updateData,
             include: {
-                manager: true,
-                team: {
-                    include: {
-                        employee: true
+                Department: true,
+                Customer: true,
+                Site: true,
+                tasks: true,
+                // Select fields based on the updated Prisma schema
+                Document: {
+                  select: {
+                    id: true,
+                    name: true,         // Use 'name' instead of 'title'
+                    description: true,
+                    fileUrl: true,
+                    mimeType: true,     // Use 'mimeType' instead of 'fileType'
+                    size: true,         // Use 'size' instead of 'fileSize'
+                    // version: true,    // Removed from schema
+                    projectId: true,
+                    customerId: true,
+                    createdById: true,  // Use 'createdById' instead of 'uploadedById'
+                    createdAt: true,
+                    updatedAt: true,
+                  }
+                },
+                 // Explicitly select fields for TeknisyenRapor in update response
+                 TeknisyenRapor: {
+                    select: {
+                      id: true,
+                      baslik: true,
+                      durum: true,
+                      tarih: true,
                     }
-                }
+                },
             }
         });
         
@@ -332,8 +309,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             } else if (error.code === 'P2003') { // Foreign key constraint failed
                 return NextResponse.json({ 
                     success: false, 
-                    message: 'Geçersiz yönetici ID\'si sağlandı. Lütfen geçerli bir ID kullanın.' 
+                    message: 'Geçersiz ilişki bilgisi. Lütfen geçerli ID değerleri kullanın.' 
                 }, { status: 400 });
+            } else if (error.code === 'P2025') { // Record to update not found
+                 return NextResponse.json({ success: false, message: 'Güncellenecek proje bulunamadı.' }, { status: 404 });
             }
         }
         
@@ -343,4 +322,4 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         }
         return NextResponse.json({ success: false, message: errorMessage }, { status: 500 });
     }
-} 
+}

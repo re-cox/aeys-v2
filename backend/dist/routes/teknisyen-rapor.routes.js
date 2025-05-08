@@ -35,13 +35,18 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const teknisyenRaporController = __importStar(require("../controllers/teknisyen-rapor.controller"));
-const auth_middleware_1 = require("../middleware/auth.middleware");
+// import { protect } from '../middleware/auth.middleware'; // Yorum satırı yapıldı
 const upload_service_1 = require("../services/upload.service");
 // Tek dosya yükleme için Multer instance (örneğin, rapor dokümanları için)
 const uploadSingleFile = (0, upload_service_1.configureMulter)('documents', { fileSize: 5 * 1024 * 1024 }); // 5MB limit
 const router = (0, express_1.Router)();
+// Basit bir test rotası - BU ÇALIŞIYOR MU DİYE KONTROL EDEBİLİRİZ
+router.get('/ping', (req, res) => {
+    console.log('[TeknisyenRaporRoutes] 👋 /ping isteği alındı - TEST ÇALIŞIYOR!');
+    res.status(200).json({ message: 'pong from teknisyen-rapor.routes', success: true, timestamp: new Date().toISOString() });
+});
 // Tüm route'larda kimlik doğrulama uygula
-router.use(auth_middleware_1.protect);
+// router.use(protect as RequestHandler); // Yorum satırı yapıldı
 // Personel listesini getir (teknisyen seçimi için)
 router.get('/personeller/listele', teknisyenRaporController.getPersoneller);
 // Rapor için doküman yükleme

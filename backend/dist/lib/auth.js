@@ -35,14 +35,15 @@ exports.authOptions = {
                         return null;
                     }
                     const user = yield prisma.user.findUnique({
-                        where: { email: credentials.email }
+                        where: { email: credentials.email },
+                        include: { role: true }
                     });
-                    if (!user || !user.hashedPassword) {
+                    if (!user || !user.passwordHash) {
                         // Kullanıcı bulunamadı veya şifresi hashlenmemiş
                         console.error(`Yetkilendirme hatası: Kullanıcı bulunamadı veya şifre hashlenmemiş - ${credentials.email}`);
                         return null;
                     }
-                    const isValidPassword = yield bcrypt_1.default.compare(credentials.password, user.hashedPassword);
+                    const isValidPassword = yield bcrypt_1.default.compare(credentials.password, user.passwordHash);
                     if (!isValidPassword) {
                         console.error(`Yetkilendirme hatası: Geçersiz şifre - ${credentials.email}`);
                         return null;
@@ -53,7 +54,7 @@ exports.authOptions = {
                         id: user.id,
                         name: user.name,
                         email: user.email,
-                        role: user.role, // Kullanıcı rolünü ekleyin
+                        roleId: user.roleId,
                         // Gerekirse diğer kullanıcı bilgilerini ekleyin
                     };
                 });

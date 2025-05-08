@@ -101,13 +101,21 @@ export async function POST(request: NextRequest) {
           select: { id: true, name: true, surname: true, email: true, department: { select: { id: true, name: true } }, role: { select: { id: true, name: true} } } 
         });
 
-        // ... (Başarılı yanıt)
-      } catch (createError) {
-        // ... (Hata yönetimi)
+        console.log(`[API /users] Yeni kullanıcı oluşturuldu:`, newUser);
+        return NextResponse.json(newUser, { status: 201 });
+
+      } catch (createError: any) {
+        console.error('[API /users] Kullanıcı oluşturma hatası:', createError);
+        // Prisma unique constraint hatası
+        if (createError.code === 'P2002' && createError.meta?.target?.includes('email')) {
+             return NextResponse.json({ error: 'Bu email adresi zaten kullanılıyor.' }, { status: 409 });
+        }
+        return NextResponse.json({ error: 'Kullanıcı oluşturulamadı.', details: createError.message || createError }, { status: 500 });
       }
-    // ... (catch blokları)
-  }
-// ... (catch bloğu)
+    } catch (error: any) {
+       console.error('[API /users] POST isteği genel hata:', error);
+       return NextResponse.json({ error: 'Beklenmedik bir sunucu hatası oluştu.' }, { status: 500 });
+    }
 }
 
 // Kullanıcı güncelle

@@ -198,7 +198,8 @@ export const updateAnnualLeaveStatus = async (req: Request, res: Response, next:
 
         if (!approverId) {
              // Eğer approverId bulunamazsa (middleware çalışmadıysa veya user bilgisi yoksa) hata döndür
-             return res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+             res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+             return;
         }
 
         const updatedLeave = await prisma.annualLeave.update({
@@ -274,8 +275,19 @@ export const updateAnnualLeave = async (req: Request, res: Response, next: NextF
             return;
         }
 
-        // TODO: Yetkilendirme kontrolü - Sadece izin sahibi veya yönetici güncelleyebilmeli
-        // if (req.user.id !== existingLeave.userId && req.user.role !== 'admin') { ... }
+        // Kullanıcının kimliğini middleware'den al
+        const userId = req.user?.id; // req.user'dan userId'yi al
+        if(!userId) {
+             res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı." });
+             return;
+        }
+
+        // Kullanıcının kimliğini veya rolünü kontrol etme
+        const requestingUser = await prisma.employee.findUnique({ where: { id: userId } }); // userId değişkenini kullan
+        if (!requestingUser) {
+            res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+            return;
+        }
 
         if (existingLeave.status !== LeaveStatus.PENDING) {
             res.status(403).json({ message: "Sadece bekleyen izin talepleri güncellenebilir" });

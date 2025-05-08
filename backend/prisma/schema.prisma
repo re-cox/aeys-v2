@@ -28,6 +28,8 @@ model User {
   teknisyenRaporlari   TeknisyenRapor[]
   role                 Role               @relation(fields: [roleId], references: [id])
   assignedTasks        Task[]             @relation("TaskAssignee")
+  customers            Customer[] // Customer modeli ile ilişki eklendi
+  createdProposals     Proposal[]         @relation("ProposalCreator") // User->Proposal ilişkisi
 }
 
 model Role {
@@ -74,6 +76,7 @@ model Project {
   tasks              Task[]
   teknisyenRaporlari TeknisyenRapor[]
   purchaseRequests   PurchaseRequest[]
+  proposals          Proposal[]         // Project->Proposal ilişkisi
 }
 
 model Task {
@@ -87,7 +90,7 @@ model Task {
   completedDate  DateTime?
   estimatedHours Float?
   actualHours    Float?
-  projectId      String
+  projectId      String?
   createdById    String
   parentTaskId   String?
   createdAt      DateTime   @default(now())
@@ -95,7 +98,7 @@ model Task {
   createdBy      User       @relation(fields: [createdById], references: [id])
   parentTask     Task?      @relation("SubTasks", fields: [parentTaskId], references: [id])
   subTasks       Task[]     @relation("SubTasks")
-  project        Project    @relation(fields: [projectId], references: [id])
+  project        Project?   @relation(fields: [projectId], references: [id])
   assignees      User[]     @relation("TaskAssignee")
 }
 
@@ -118,9 +121,12 @@ model Customer {
   status       CustomerStatus @default(ACTIVE)
   taxOffice    String?
   website      String?
+  userId       String? // Kullanıcı ilişkisi için alan eklendi (Geçici olarak isteğe bağlı yapıldı)
+  user         User?      @relation(fields: [userId], references: [id]) // User modeli ile ilişki tanımlandı (Geçici olarak isteğe bağlı yapıldı)
   contacts     Contact[]
   documents    Document[]
   projects     Project[]
+  proposals    Proposal[]         // Customer->Proposal ilişkisi
 }
 
 model Contact {
@@ -460,4 +466,53 @@ model PurchaseRequestItem {
 
   // İlişkiler
   purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade) // Talep silinince kalemler de silinsin
+}
+
+enum ProposalStatus {
+  DRAFT     // Taslak
+  SENT      // Gönderildi
+  APPROVED  // Onaylandı
+  REJECTED  // Reddedildi
+  EXPIRED   // Süresi Doldu
+}
+
+model Proposal {
+  id             String         @id @default(uuid())
+  proposalNo     String         @unique // Teklif No (örn: 20240729-001)
+  status         ProposalStatus @default(DRAFT) // Teklif Durumu
+  customerId     String         // İlişkili Müşteri ID'si
+  projectId      String?        // İlişkili Proje ID'si (opsiyonel)
+  issueDate      DateTime       @default(now()) // Oluşturulma/Gönderilme Tarihi
+  validUntilDate DateTime?      // Geçerlilik Tarihi
+  totalAmount    Float          @default(0.0) // Toplam Tutar (Items'dan hesaplanabilir veya manuel girilebilir)
+  notes          String?        // Notlar
+  createdById    String         // Teklifi Oluşturan Kullanıcı ID'si
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  // İlişkiler (karşı ilişkilerle güncellendi)
+  customer    Customer       @relation(fields: [customerId], references: [id])
+  project     Project?       @relation(fields: [projectId], references: [id])
+  createdBy   User           @relation("ProposalCreator", fields: [createdById], references: [id])
+  items       ProposalItem[] // Teklif Kalemleri (Bir teklifte birden çok kalem olabilir)
+
+  @@index([customerId])
+  @@index([projectId])
+  @@index([createdById])
+}
+
+model ProposalItem {
+  id          String   @id @default(uuid())
+  proposalId  String   // Bağlı olduğu Teklif ID'si
+  description String   // Kalem Açıklaması
+  quantity    Float    @default(1.0)
+  unitPrice   Float    @default(0.0) // Birim Fiyat
+  totalPrice  Float    // Toplam Fiyat (quantity * unitPrice) - Otomatik hesaplanmalı veya girilmeli
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // İlişkiler
+  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade) // Teklif silinince kalemler de silinsin
+
+  @@index([proposalId])
 }

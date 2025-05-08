@@ -9,13 +9,15 @@ import teknisyenRaporRoutes from './routes/teknisyen-rapor.routes';
 import roleRoutes from './routes/role.routes'; // Yorumu kaldırıldı
 // import { errorHandler } from './middleware/errorHandler'; // Yorum satırı - Dosya bulunamadı
 import { errorHandler } from './utils/error-handler'; // Yeni hata middleware'ini import et
-import customerRoutes from './routes/customer.routes'; // Yeni customer route'larını import et
-import proposalRoutes from './routes/proposal.routes'; // Teklif rotalarını import et
+import customerRoutes from './routes/customers.routes'; // Doğru olan bu
+import proposalRoutes from './routes/proposal.routes'; // Yorum kaldırıldı
 import edasRoutes from './routes/edas.routes'; // EDAS rotalarını import et
 import folderRoutes from './routes/folder.routes'; // Klasör rotaları
 import documentRoutes from './routes/document.routes'; // Döküman rotaları
 import uploadRoutes from './routes/upload.routes'; // Dosya yükleme rotaları
 import fileUpload from 'express-fileupload'; // Dosya yükleme paketi
+import attendanceRoutes from './routes/attendance.routes';
+import authRoutes from './routes/auth.routes';
 
 dotenv.config();
 
@@ -36,7 +38,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(fileUpload({
   useTempFiles: true,
   tempFileDir: '/tmp/',
-  createParentPath: true, // Parent klasörleri oluşturur
+  createParentPath: true,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
   debug: process.env.NODE_ENV === 'development' // Geliştirme modunda debug aktif
 }));
@@ -66,11 +68,13 @@ app.use('/api/teknisyen-raporlari', teknisyenRaporRoutes);
 // Orijinal rol route'u tekrar aktif edildi (ama 404 verebilir)
 app.use('/api/roles', roleRoutes);
 app.use('/api/customers', customerRoutes); // Yeni customer route'larını kullan (doğru yere taşındı)
-app.use('/api/proposals', proposalRoutes); // Teklif rotalarını kullan
+app.use('/api/proposals', proposalRoutes); // Yorum kaldırıldı
 app.use('/api', edasRoutes); // EDAS rotaları
 app.use('/api/folders', folderRoutes); // Klasör rotaları eklendi
 app.use('/api/documents', documentRoutes); // Döküman rotaları eklendi
 app.use('/api/uploads', uploadRoutes); // Dosya yükleme rotaları eklendi
+app.use('/api/attendances', attendanceRoutes);
+app.use('/api/auth', authRoutes);
 
 // 404 - Bulunamayan Rotalar
 app.use((req, res) => {

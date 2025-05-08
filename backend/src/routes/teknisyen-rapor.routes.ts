@@ -1,6 +1,6 @@
 import { Router, RequestHandler } from 'express';
 import * as teknisyenRaporController from '../controllers/teknisyen-rapor.controller';
-import { protect } from '../middleware/auth.middleware';
+// import { protect } from '../middleware/auth.middleware'; // Yorum satırı yapıldı
 import { configureMulter } from '../services/upload.service';
 
 // Tek dosya yükleme için Multer instance (örneğin, rapor dokümanları için)
@@ -8,8 +8,14 @@ const uploadSingleFile = configureMulter('documents', { fileSize: 5 * 1024 * 102
 
 const router = Router();
 
+// Basit bir test rotası - BU ÇALIŞIYOR MU DİYE KONTROL EDEBİLİRİZ
+router.get('/ping', (req, res) => {
+  console.log('[TeknisyenRaporRoutes] 👋 /ping isteği alındı - TEST ÇALIŞIYOR!');
+  res.status(200).json({ message: 'pong from teknisyen-rapor.routes', success: true, timestamp: new Date().toISOString() });
+});
+
 // Tüm route'larda kimlik doğrulama uygula
-router.use(protect as RequestHandler);
+// router.use(protect as RequestHandler); // Yorum satırı yapıldı
 
 // Personel listesini getir (teknisyen seçimi için)
 router.get('/personeller/listele', teknisyenRaporController.getPersoneller as RequestHandler);

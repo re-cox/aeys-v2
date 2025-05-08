@@ -55,7 +55,7 @@ router.delete('/:employeeId', auth_middleware_1.protect, employeeController.dele
 // Profil fotoğrafı yükleme endpoint'i
 // Önce protect, sonra multer middleware çalışır
 // upload.single('profilePicture') -> 'profilePicture' alanı frontend'deki FormData ile eşleşmeli
-router.post('/:employeeId/profile-picture', auth_middleware_1.protect, uploadProfile.single('profilePicture'), employeeController.uploadProfilePicture);
+router.post('/:id/profile-picture', auth_middleware_1.protect, uploadProfile.single('profilePicture'), employeeController.uploadProfilePicture);
 // Personel dökümanları yükleme endpoint'i
 // Önce protect, sonra multer middleware çalışır
 // upload.array('documents', 10) -> 'documents' alanı frontend'deki FormData ile eşleşmeli, max 10 dosya

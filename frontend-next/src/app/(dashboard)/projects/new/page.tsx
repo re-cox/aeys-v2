@@ -1,98 +1,157 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { format } from 'date-fns';
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/components/ui/use-toast";
+// import { DatePicker } from "@/components/date-picker";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Controller, useForm } from "react-hook-form";
+import * as z from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { format } from "date-fns";
 import { tr } from 'date-fns/locale';
-import { Calendar as CalendarIcon, Loader2, ArrowLeft } from 'lucide-react';
-import Link from 'next/link';
+import { toast } from "sonner";
+import axios from 'axios';
+import { ArrowLeft, Calendar as CalendarIcon } from "lucide-react";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-    Popover,
-    PopoverContent,
-    PopoverTrigger,
-} from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
-import { Card, CardHeader, CardTitle, CardContent, CardFooter } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
-import { toast } from 'sonner'; // Assuming sonner is used for notifications
-import { cn } from '@/lib/utils'; // For conditional classes
-
-// Enums matching Prisma schema
-const ProjectStatus = z.enum(["PLANNING", "IN_PROGRESS", "ON_HOLD", "COMPLETED", "CANCELLED"]);
-const ProjectPriority = z.enum(["LOW", "MEDIUM", "HIGH", "URGENT"]);
-
-// Zod schema for validation
-const projectSchema = z.object({
-  name: z.string().min(3, { message: 'Proje adı en az 3 karakter olmalıdır.' }),
-  description: z.string().optional(),
-  status: ProjectStatus.optional().default('PLANNING'),
-  priority: ProjectPriority.optional().default('MEDIUM'),
-  startDate: z.date().optional(),
-  endDate: z.date().optional(),
-  budget: z.preprocess(
-    (val) => (val === '' || val === null || val === undefined) ? undefined : Number(val),
-    z.number().positive({ message: 'Bütçe pozitif bir sayı olmalıdır.' }).optional()
-  ),
-  managerId: z.string().optional(),
-  // teamMembers: z.array(z.string()).optional(), // Assuming teamMembers will be handled differently
+// Form şeması ve validation
+const formSchema = z.object({
+  name: z.string().min(3, "Proje adı en az 3 karakter olmalıdır."),
+  description: z.string().min(10, "Proje açıklaması en az 10 karakter olmalıdır."),
+  startDate: z.date({ required_error: "Başlangıç tarihi zorunludur" }),
+  endDate: z.date({ required_error: "Bitiş tarihi zorunludur" }).optional(),
+  managerId: z.string().min(1, "Proje yöneticisi seçilmelidir"),
+  status: z.string().min(1, "Proje durumu seçilmelidir"),
+  budget: z.string().optional(),
+  clientId: z.string().optional(),
+  departmentId: z.string().min(1, "Departman seçilmelidir"),
 });
-
-type ProjectFormData = z.infer<typeof projectSchema>;
-
-interface Employee {
-  id: string;
-  name: string;
-}
 
 export default function NewProjectPage() {
   const router = useRouter();
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingEmployees, setIsFetchingEmployees] = useState(true);
+  const { toast: toastUI } = useToast();
+  const [isFetchingEmployees, setIsFetchingEmployees] = useState(false);
+  const [employees, setEmployees] = useState<{ id: string; name: string }[]>([]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [isFetchingDepartments, setIsFetchingDepartments] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    control,
-    formState: { errors },
-    reset,
-  } = useForm<ProjectFormData>({
-    resolver: zodResolver(projectSchema),
+  const form = useForm<z.infer<typeof formSchema>>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
-        status: 'PLANNING',
-        priority: 'MEDIUM',
-    }
+      name: "",
+      description: "",
+      budget: "",
+      status: "active", // Default status
+      departmentId: "", // Varsayılan departman ID'si (boş)
+    },
   });
 
   useEffect(() => {
     const fetchEmployees = async () => {
       setIsFetchingEmployees(true);
       try {
-        // Use real API to fetch employees
-        const response = await fetch('/api/employees/list');
+        // Hata ayıklama için daha fazla detay
+        console.log("Çalışanları getirme işlemi başlıyor...");
+        
+        // Backend API'sine doğrudan istek gönder
+        const API_BASE_URL = "http://localhost:5001/api";
+        
+        // localStorage client-side'da güvenli bir şekilde kullanmak için
+        let token = null;
+        if (typeof window !== 'undefined') {
+          token = localStorage.getItem('token');
+          console.log("Token durumu:", token ? "Bulundu" : "Bulunamadı");
+        }
+        
+        if (!token) {
+          console.error("Token bulunamadı, lütfen oturum açın");
+          toast.error('Oturum bilgisi bulunamadı. Lütfen yeniden giriş yapın.');
+          setIsFetchingEmployees(false);
+          return;
+        }
+        
+        console.log(`${API_BASE_URL}/employees API'sine istek gönderiliyor...`);
+        
+        // Backend API'ye yetkilendirme token'ı ile istek gönder
+        const response = await fetch(`${API_BASE_URL}/employees`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        console.log("API yanıtı:", response.status, response.statusText);
+        
         if (!response.ok) {
           throw new Error('Çalışanlar getirilemedi.');
         }
-        const data = await response.json();
-        setEmployees(data.data || []);
+        
+        const responseData = await response.json();
+        console.log("Alınan yanıt verisi:", responseData);
+        
+        // Yanıt verilerini kontrol et
+        if (!responseData || !responseData.data || !Array.isArray(responseData.data)) {
+          console.error("API yanıtı beklenen formatta değil:", responseData);
+          throw new Error('API yanıtı geçersiz format.');
+        }
+        
+        // Veri yapısını loglayarak analiz et - ilk elemanı incele
+        if (responseData.data.length > 0) {
+          console.log("Örnek çalışan verisi:", JSON.stringify(responseData.data[0], null, 2));
+        }
+        
+        // Backend veri formatını bizim istediğimiz formata dönüştür
+        const processedEmployees = responseData.data.map((emp: any) => {
+          // Veri yapısına göre uygun alan kontrollerini yap
+          // Çalışan adı direkt olarak emp nesnesinde veya user.name içinde olabilir
+          let firstName = '';
+          let lastName = '';
+          
+          // Farklı veri yapısı olasılıklarını kontrol et
+          if (emp.user?.name) {
+            firstName = emp.user.name;
+            lastName = emp.user.surname || '';
+          } else if (emp.name) {
+            firstName = emp.name;
+            lastName = emp.surname || '';
+          } else if (emp.firstName) {
+            firstName = emp.firstName;
+            lastName = emp.lastName || '';
+          }
+          
+          const fullName = `${firstName} ${lastName}`.trim();
+          
+          console.log(`Çalışan ID: ${emp.id}, İşlenen İsim: ${fullName || 'İsimsiz Çalışan'}`);
+          
+          return {
+            id: emp.id,
+            name: fullName || 'İsimsiz Çalışan'
+          };
+        });
+        
+        console.log("İşlenmiş çalışan verileri:", processedEmployees);
+        setEmployees(processedEmployees);
 
-        // If no employees found, log a warning
-        if (!data.data || data.data.length === 0) {
-          console.warn("Dikkat: Veritabanında hiç çalışan bulunamadı! Önce Employee tablosunu doldurun.");
+        // Hiç çalışan bulunamadıysa uyarı göster
+        if (processedEmployees.length === 0) {
+          console.warn("Dikkat: Hiç çalışan bulunamadı! Önce Employee tablosunu doldurun.");
         }
 
       } catch (error) {
@@ -105,259 +164,376 @@ export default function NewProjectPage() {
     fetchEmployees();
   }, []);
 
-  const onSubmit = async (data: ProjectFormData) => {
-    setIsLoading(true);
-    const toastId = toast.loading('Proje oluşturuluyor...');
+  // Departmanları getirme
+  useEffect(() => {
+    const fetchDepartments = async () => {
+      setIsFetchingDepartments(true);
+      try {
+        console.log("Departmanları getirme işlemi başlıyor...");
+        
+        // Backend API'sine doğrudan istek gönder
+        const API_BASE_URL = "http://localhost:5001/api";
+        
+        // localStorage client-side'da güvenli bir şekilde kullanmak için
+        let token = null;
+        if (typeof window !== 'undefined') {
+          token = localStorage.getItem('token');
+        }
+        
+        if (!token) {
+          console.error("Token bulunamadı, lütfen oturum açın");
+          toast.error('Oturum bilgisi bulunamadı. Lütfen yeniden giriş yapın.');
+          setIsFetchingDepartments(false);
+          return;
+        }
+        
+        console.log(`${API_BASE_URL}/departments API'sine istek gönderiliyor...`);
+        
+        // Backend API'ye yetkilendirme token'ı ile istek gönder
+        const response = await fetch(`${API_BASE_URL}/departments`, {
+          headers: {
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        
+        if (!response.ok) {
+          throw new Error('Departmanlar getirilemedi.');
+        }
+        
+        const responseData = await response.json();
+        
+        // Yanıt verilerini kontrol et
+        if (!responseData || !responseData.data || !Array.isArray(responseData.data)) {
+          console.error("API yanıtı beklenen formatta değil:", responseData);
+          throw new Error('API yanıtı geçersiz format.');
+        }
+        
+        // Backend veri formatını bizim istediğimiz formata dönüştür
+        const processedDepartments = responseData.data.map((dep: any) => {
+          return {
+            id: dep.id,
+            name: dep.name || 'İsimsiz Departman'
+          };
+        });
+        
+        console.log("İşlenmiş departman verileri:", processedDepartments);
+        setDepartments(processedDepartments);
 
-    const payload = {
-        ...data,
-        startDate: data.startDate ? data.startDate.toISOString() : null,
-        endDate: data.endDate ? data.endDate.toISOString() : null,
-        // teamMembers: data.teamMembers, // Add team members if handling
+      } catch (error) {
+        console.error("Error fetching departments:", error);
+        toast.error('Departman listesi yüklenirken bir hata oluştu.');
+      } finally {
+        setIsFetchingDepartments(false);
+      }
     };
+    
+    fetchDepartments();
+  }, []);
 
-    // Log the payload with JSON.stringify for better visibility
-    console.log('Sending project payload:', JSON.stringify(payload, null, 2));
-
+  // Form gönderimi
+  async function onSubmit(values: z.infer<typeof formSchema>) {
+    setIsSubmitting(true);
     try {
+      console.log("Form değerleri:", values);
+      
+      // Tarih formatını API'ye uygun hale getir
+      const formattedValues = {
+        ...values,
+        startDate: format(new Date(values.startDate), 'yyyy-MM-dd'),
+        endDate: values.endDate ? format(new Date(values.endDate), 'yyyy-MM-dd') : undefined,
+        budget: values.budget ? parseFloat(values.budget) : undefined,
+      };
+      
+      console.log("API'ye gönderilecek değerler:", formattedValues);
+      
+      // API isteği
       const response = await fetch('/api/projects', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formattedValues),
       });
-
-      const result = await response.json();
-
-      if (!response.ok || !result.success) {
-         // Log the error response from the API
-         console.error('API Error Response:', result);
-         throw new Error(result.message || 'Proje oluşturulamadı.');
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Proje oluşturulurken bir hata oluştu.');
       }
-
-      toast.success('Proje başarıyla oluşturuldu!', { id: toastId });
-      reset(); // Reset form after successful submission
-      // Redirect to the project list or the new project's detail page
+      
+      toast.success('Proje başarıyla oluşturuldu');
       router.push('/projects');
-    //   router.push(`/projects/${result.data.id}`); // Option to redirect to detail page
-
-    } catch (error: any) {
-      console.error("Submit Error:", error);
-      toast.error(`Proje oluşturma başarısız: ${error.message}`, { id: toastId });
+      
+    } catch (error) {
+      console.error("Error creating project:", error);
+      const errorMessage = error instanceof Error ? error.message : 'Proje oluşturulurken bir hata oluştu.';
+      toast.error(errorMessage);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
-  };
+  }
 
   return (
-    <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 max-w-4xl">
-       <Button variant="outline" size="sm" className="mb-4" onClick={() => router.back()}>
-          <ArrowLeft className="mr-2 h-4 w-4" /> Geri
-       </Button>
-      <Card>
-        <CardHeader>
-          <CardTitle>Yeni Proje Oluştur</CardTitle>
-        </CardHeader>
-        <form onSubmit={handleSubmit(onSubmit)}>
-          <CardContent className="space-y-6">
-            {/* Project Name */}
-            <div className="space-y-2">
-              <Label htmlFor="name">Proje Adı *</Label>
-              <Input id="name" {...register('name')} placeholder="Proje Adı Girin" />
-              {errors.name && <p className="text-xs text-red-600">{errors.name.message}</p>}
-            </div>
+    <div className="container mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-6">Yeni Proje Oluştur</h1>
+      
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle>Proje Bilgileri</CardTitle>
+              <CardDescription>
+                Yeni projenin temel bilgilerini girin
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Proje Adı */}
+              <FormField
+                control={form.control}
+                name="name"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Proje Adı</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ör: Aydem Merkez Binası Elektrik Altyapı Projesi" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              
+              {/* Proje Açıklaması */}
+              <FormField
+                control={form.control}
+                name="description"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Proje Açıklaması</FormLabel>
+                    <FormControl>
+                      <Textarea 
+                        placeholder="Projenin kapsamı ve detayları hakkında bilgi verin" 
+                        className="min-h-32"
+                        {...field} 
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
-            {/* Description */}
-            <div className="space-y-2">
-              <Label htmlFor="description">Açıklama</Label>
-              <Textarea id="description" {...register('description')} placeholder="Proje detaylarını girin..." />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {/* Status */}
-                <div className="space-y-2">
-                <Label htmlFor="status">Durum</Label>
-                <Controller
-                    name="status"
-                    control={control}
-                    render={({ field }) => (
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <SelectTrigger id="status">
-                        <SelectValue placeholder="Durum Seçin" />
-                        </SelectTrigger>
+              {/* Başlangıç ve Bitiş Tarihleri */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="startDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Başlangıç Tarihi</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: tr })
+                              ) : (
+                                <span>Tarih seçin</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <FormField
+                  control={form.control}
+                  name="endDate"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Bitiş Tarihi (Opsiyonel)</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP", { locale: tr })
+                              ) : (
+                                <span>Tarih seçin</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              
+              {/* Proje Durumu ve Departman */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Proje Durumu */}
+                <FormField
+                  control={form.control}
+                  name="status"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Proje Durumu</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Proje durumunu seçin" />
+                          </SelectTrigger>
+                        </FormControl>
                         <SelectContent>
-                        {ProjectStatus.options.map((status) => (
-                            <SelectItem key={status} value={status}>{translateStatus(status)}</SelectItem>
-                        ))}
+                          <SelectItem value="active">Aktif</SelectItem>
+                          <SelectItem value="planned">Planlanmış</SelectItem>
+                          <SelectItem value="completed">Tamamlanmış</SelectItem>
+                          <SelectItem value="on-hold">Beklemede</SelectItem>
+                          <SelectItem value="cancelled">İptal Edilmiş</SelectItem>
                         </SelectContent>
-                    </Select>
-                    )}
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                 {errors.status && <p className="text-xs text-red-600">{errors.status.message}</p>}
-                </div>
-
-                {/* Priority */}
-                <div className="space-y-2">
-                <Label htmlFor="priority">Öncelik</Label>
-                 <Controller
-                    name="priority"
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                            <SelectTrigger id="priority">
-                                <SelectValue placeholder="Öncelik Seçin" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {ProjectPriority.options.map((priority) => (
-                                <SelectItem key={priority} value={priority}>{translatePriority(priority)}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                 />
-                {errors.priority && <p className="text-xs text-red-600">{errors.priority.message}</p>}
-                </div>
-            </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Start Date */}
-                <div className="space-y-2">
-                <Label htmlFor="startDate">Başlangıç Tarihi</Label>
-                 <Controller
-                    name="startDate"
-                    control={control}
-                    render={({ field }) => (
-                        <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                initialFocus
-                            />
-                            </PopoverContent>
-                        </Popover>
-                     )}
+                
+                {/* Departman */}
+                <FormField
+                  control={form.control}
+                  name="departmentId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Departman</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Departman seçin" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {isFetchingDepartments && <SelectItem value="loading_placeholder" disabled>Departmanlar yükleniyor...</SelectItem>}
+                          {!isFetchingDepartments && departments.length === 0 && <SelectItem value="no_department" disabled>Departman bulunamadı</SelectItem>}
+                          {departments.map((dep) => (
+                            <SelectItem key={dep.id} value={dep.id}>{dep.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                 {errors.startDate && <p className="text-xs text-red-600">{errors.startDate.message}</p>}
-                </div>
-
-                {/* End Date */}
-                <div className="space-y-2">
-                <Label htmlFor="endDate">Bitiş Tarihi</Label>
-                 <Controller
-                    name="endDate"
-                    control={control}
-                    render={({ field }) => (
-                        <Popover>
-                            <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                                )}
-                            >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {field.value ? format(field.value, "PPP", { locale: tr }) : <span>Tarih Seçin</span>}
-                            </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0">
-                            <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                initialFocus
-                            />
-                            </PopoverContent>
-                        </Popover>
-                    )}
+              </div>
+              
+              {/* Proje Yöneticisi ve Bütçe */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Proje Yöneticisi */}
+                <FormField
+                  control={form.control}
+                  name="managerId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Proje Yöneticisi</FormLabel>
+                      <Select 
+                        onValueChange={field.onChange} 
+                        defaultValue={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Proje yöneticisini seçin" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {isFetchingEmployees && <SelectItem value="loading_placeholder" disabled>Çalışanlar yükleniyor...</SelectItem>}
+                          {!isFetchingEmployees && employees.length === 0 && <SelectItem value="no_employee" disabled>Çalışan bulunamadı</SelectItem>}
+                          {employees.map((emp) => (
+                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
                 />
-                {errors.endDate && <p className="text-xs text-red-600">{errors.endDate.message}</p>}
-                </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                 {/* Budget */}
-                <div className="space-y-2">
-                <Label htmlFor="budget">Bütçe (₺)</Label>
-                <Input id="budget" type="number" {...register('budget')} placeholder="Örn: 150000" step="0.01" />
-                {errors.budget && <p className="text-xs text-red-600">{errors.budget.message}</p>}
-                </div>
-
-                 {/* Manager */}
-                <div className="space-y-2">
-                <Label htmlFor="managerId">Proje Yöneticisi</Label>
-                 <Controller
-                    name="managerId"
-                    control={control}
-                    render={({ field }) => (
-                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isFetchingEmployees}>
-                            <SelectTrigger id="managerId">
-                                <SelectValue placeholder={isFetchingEmployees ? "Çalışanlar yükleniyor..." : "Yönetici Seçin"} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {!isFetchingEmployees && employees.length === 0 && <SelectItem value="" disabled>Çalışan bulunamadı</SelectItem>}
-                                {employees.map((emp) => (
-                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                 />
-                {errors.managerId && <p className="text-xs text-red-600">{errors.managerId.message}</p>}
-                </div>
-
-                 {/* Team Members - Placeholder/Example */} 
-                 {/* <div className="space-y-2 md:col-span-2">
-                    <Label htmlFor="teamMembers">Ekip Üyeleri</Label>
-                    <p className="text-sm text-muted-foreground">Ekip üyesi seçimi daha sonra eklenecektir.</p>
-                     Add multi-select component here when ready
-                 </div> */} 
-            </div>
-
-          </CardContent>
-          <CardFooter className="flex justify-end">
-            <Button type="submit" disabled={isLoading}>
-              {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isLoading ? 'Oluşturuluyor...' : 'Projeyi Oluştur'}
-            </Button>
-          </CardFooter>
+                
+                {/* Bütçe */}
+                <FormField
+                  control={form.control}
+                  name="budget"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Bütçe (TL) (Opsiyonel)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number" 
+                          placeholder="Ör: 50000" 
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </CardContent>
+            <CardFooter className="flex justify-between">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => router.push('/projects')}
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" /> İptal
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Kaydediliyor...' : 'Projeyi Oluştur'}
+              </Button>
+            </CardFooter>
+          </Card>
         </form>
-      </Card>
+      </Form>
     </div>
   );
 }
-
-// Helper functions (copy from list page or define here)
-const translateStatus = (status: string): string => {
-  switch (status) {
-    case 'PLANNING': return 'Planlama';
-    case 'IN_PROGRESS': return 'Devam Ediyor';
-    case 'ON_HOLD': return 'Beklemede';
-    case 'COMPLETED': return 'Tamamlandı';
-    case 'CANCELLED': return 'İptal Edildi';
-    default: return status;
-  }
-};
-
-const translatePriority = (priority: string): string => {
-    switch (priority) {
-        case 'LOW': return 'Düşük';
-        case 'MEDIUM': return 'Orta';
-        case 'HIGH': return 'Yüksek';
-        case 'URGENT': return 'Acil';
-        default: return priority;
-    }
-}; 

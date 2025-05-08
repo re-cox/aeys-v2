@@ -17,7 +17,7 @@ import { API_URL } from "@/services/api";
 import type { BackendUserData } from "@/services/employeeService";
 import { getAllDepartments } from "@/services/departmentService";
 import { toast } from "sonner";
-import { Employee, EmployeeDocument, EmergencyContact } from "@/types/employee";
+import { Employee, EmployeeDocument, EmergencyContact, UpdateEmployeePayload } from "@/types/employee";
 import { Department } from "@/types/department";
 import { useAuth } from "@/context/AuthContext";
 import { format } from "date-fns";
@@ -112,9 +112,13 @@ export default function EditEmployeePage() {
         education: apiData.education || '',
         militaryStatus: apiData.militaryStatus || '',
         annualLeaveAllowance: apiData.annualLeaveAllowance || 0,
-        emergencyContactName: apiData.emergencyContactName || '',
-        emergencyContactPhone: apiData.emergencyContactPhone || '',
-        emergencyContactRelation: apiData.emergencyContactRelation || '',
+        salary: apiData.salary || null,
+        emergencyContacts: {
+          id: 'temp-id',
+          name: apiData.emergencyContactName || '',
+          phone: apiData.emergencyContactPhone || '',
+          relation: apiData.emergencyContactRelation || ''
+        },
         isActive: apiData.isActive === undefined ? true : apiData.isActive,
       };
       
@@ -381,28 +385,28 @@ export default function EditEmployeePage() {
          try { await refreshUser(); } catch { console.warn("Token yenileme başarısız, devam ediliyor..."); }
       }
       
-      const updateData: Partial<Employee> = {
-          name: employee.name,
-          surname: employee.surname,
-          email: employee.email,
-          phoneNumber: employee.phoneNumber,
-          position: employee.position,
+      const updateData: UpdateEmployeePayload = {
+          firstName: employee.name || '',
+          lastName: employee.surname || '',
+          email: employee.email || '',
+          phoneNumber: employee.phoneNumber || '',
+          position: employee.position || '',
           departmentId: employee.departmentId,
-          hireDate: employee.hireDate || undefined,
-          birthDate: employee.birthDate || undefined,
-          salary: employee.salary,
-          tcKimlikNo: employee.tcKimlikNo,
-          bloodType: employee.bloodType,
-          drivingLicense: employee.drivingLicense,
-          address: employee.address,
-          iban: employee.iban,
-          militaryStatus: employee.militaryStatus,
-          education: employee.education,
-          annualLeaveAllowance: employee.annualLeaveAllowance,
+          hireDate: employee.hireDate ? formatDate(employee.hireDate) : null,
+          birthDate: employee.birthDate ? formatDate(employee.birthDate) : null,
+          salary: employee.salary !== null ? employee.salary : undefined,
+          tcKimlikNo: employee.tcKimlikNo || '',
+          bloodType: employee.bloodType || null,
+          drivingLicense: employee.drivingLicense || null,
+          address: employee.address || '',
+          iban: employee.iban || '',
+          militaryStatus: employee.militaryStatus || null,
+          education: employee.education || '',
+          annualLeaveAllowance: employee.annualLeaveAllowance !== null ? employee.annualLeaveAllowance : undefined,
           profilePictureUrl: updatedProfileUrl,
-          emergencyContactName: employee.emergencyContacts?.name,
-          emergencyContactPhone: employee.emergencyContacts?.phone,
-          emergencyContactRelation: employee.emergencyContacts?.relation,
+          emergencyContactName: employee.emergencyContacts?.name || '',
+          emergencyContactPhone: employee.emergencyContacts?.phone || '',
+          emergencyContactRelation: employee.emergencyContacts?.relation || '',
       };
 
       console.log("Gönderilecek Güncelleme Verisi (Profil URL Göreceli):", updateData);

@@ -90,22 +90,22 @@ export type NewProposalAttachmentData = {
 
 // Yeni Proposal oluşturmak için veri (API'ye gönderilecek)
 export type NewProposalData = {
-  title: string;
+  title: string; // Teklif başlığı zorunlu
   customerId: string;
   status?: ProposalStatus;
   validUntil?: string | null; // ISO string formatında
   items: Omit<NewProposalItemData, 'id'>[]; // Kalemler (geçici ID olmadan)
   attachments?: NewProposalAttachmentData[]; // Eklenecek dosyalar (opsiyonel)
-  description?: string; // Açıklama eklendi
+  description?: string | null;
 };
 
 // Proposal güncellemek için veri (API'ye gönderilecek)
 export type UpdateProposalData = {
-    title?: string; // Güncellemede alanlar opsiyonel olabilir
+    title?: string;
     customerId?: string;
     status?: ProposalStatus;
     validUntil?: string | null;
     items?: Omit<NewProposalItemData, 'id'>[];
     attachments?: NewProposalAttachmentData[]; // Attachment alanı eklendi
-    description?: string; // Açıklama eklendi
+    description?: string | null;
 }; 

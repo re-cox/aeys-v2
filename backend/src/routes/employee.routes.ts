@@ -50,7 +50,7 @@ router.delete(
 // Önce protect, sonra multer middleware çalışır
 // upload.single('profilePicture') -> 'profilePicture' alanı frontend'deki FormData ile eşleşmeli
 router.post(
-    '/:employeeId/profile-picture',
+    '/:id/profile-picture',
     protect as RequestHandler,
     uploadProfile.single('profilePicture'),
     employeeController.uploadProfilePicture as RequestHandler

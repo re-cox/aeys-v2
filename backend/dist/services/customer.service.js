@@ -15,33 +15,47 @@ const client_1 = require("@prisma/client");
 // import { NotFoundError, BadRequestError } from '../utils/errors';
 const prisma = new client_1.PrismaClient();
 /**
- * Tüm müşterileri getirir.
+ * Belirli bir kullanıcıya ait tüm müşterileri getirir.
+ * @param {string} userId Kullanıcı ID'si.
  * @returns {Promise<Customer[]>} Müşteri listesi.
  */
-const getAllCustomers = () => __awaiter(void 0, void 0, void 0, function* () {
-    return prisma.customer.findMany();
+const getAllCustomers = (userId) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!userId) {
+        throw new Error('Kullanıcı ID\'si gerekli.');
+    }
+    return prisma.customer.findMany({
+        where: { userId: userId },
+        orderBy: { createdAt: 'desc' }
+    });
 });
 exports.getAllCustomers = getAllCustomers;
 /**
- * ID ile belirli bir müşteriyi getirir.
+ * ID ile belirli bir müşteriyi getirir ve kullanıcının yetkisini kontrol eder.
  * @param {string} id Müşteri ID'si.
+ * @param {string} userId Kullanıcı ID'si.
  * @returns {Promise<Customer>} Müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-const getCustomerById = (id) => __awaiter(void 0, void 0, void 0, function* () {
+const getCustomerById = (id, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    if (!userId) {
+        throw new Error('Kullanıcı ID\'si gerekli.');
+    }
     const customer = yield prisma.customer.findUnique({
-        where: { id },
+        where: { id: id },
     });
     if (!customer) {
-        // NotFoundError yerine standart Error
         throw new Error('Müşteri bulunamadı');
+    }
+    // Güvenlik: Müşterinin bu kullanıcıya ait olup olmadığını kontrol et
+    if (customer.userId !== userId) {
+        throw new Error('Bu müşteri bilgisine erişim yetkiniz yok.'); // Yetkisiz erişim hatası
     }
     return customer;
 });
 exports.getCustomerById = getCustomerById;
 /**
  * Yeni bir müşteri oluşturur.
- * @param {CustomerCreateData} data Yeni müşteri verileri.
+ * @param {CustomerCreateData} data Yeni müşteri verileri (userId içermeli).
  * @returns {Promise<Customer>} Oluşturulan müşteri nesnesi.
  */
 const createCustomer = (data) => __awaiter(void 0, void 0, void 0, function* () {
@@ -66,12 +80,13 @@ exports.createCustomer = createCustomer;
  * Mevcut bir müşteriyi günceller.
  * @param {string} id Güncellenecek müşteri ID'si.
  * @param {CustomerUpdateData} data Güncelleme verileri.
+ * @param {string} userId İşlemi yapan kullanıcı ID'si.
  * @returns {Promise<Customer>} Güncellenen müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-const updateCustomer = (id, data) => __awaiter(void 0, void 0, void 0, function* () {
-    // Önce müşterinin var olup olmadığını kontrol et (getCustomerById Error fırlatır)
-    yield (0, exports.getCustomerById)(id);
+const updateCustomer = (id, data, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    // Önce müşterinin var olup olmadığını ve kullanıcıya ait olup olmadığını kontrol et
+    yield (0, exports.getCustomerById)(id, userId);
     // E-posta benzersizlik kontrolü kaldırıldı
     /*
     if (data.email) {
@@ -95,12 +110,13 @@ exports.updateCustomer = updateCustomer;
 /**
  * Bir müşteriyi siler.
  * @param {string} id Silinecek müşteri ID'si.
+ * @param {string} userId İşlemi yapan kullanıcı ID'si.
  * @returns {Promise<Customer>} Silinen müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-const deleteCustomer = (id) => __awaiter(void 0, void 0, void 0, function* () {
-    // Önce müşterinin var olup olmadığını kontrol et (getCustomerById Error fırlatır)
-    yield (0, exports.getCustomerById)(id);
+const deleteCustomer = (id, userId) => __awaiter(void 0, void 0, void 0, function* () {
+    // Önce müşterinin var olup olmadığını ve kullanıcıya ait olup olmadığını kontrol et
+    yield (0, exports.getCustomerById)(id, userId);
     return prisma.customer.delete({
         where: { id },
     });

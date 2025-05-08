@@ -300,7 +300,7 @@ export default function NewEmployeePage() {
       <div className="flex items-center mb-6">
         <Button variant="ghost" size="icon" onClick={() => router.back()} className="mr-2">
           <ArrowLeft className="h-5 w-5" />
-        </Button>
+          </Button>
         <h1 className="text-2xl font-semibold text-gray-800">Yeni Personel Ekle</h1>
       </div>
 
@@ -313,7 +313,7 @@ export default function NewEmployeePage() {
               <div className="col-span-1 md:col-span-2 flex flex-col items-center space-y-3">
                   <Label htmlFor="profilePicture" className="text-gray-600 font-medium">Profil Fotoğrafı</Label>
                   <div className="w-32 h-32 rounded-full border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-100 overflow-hidden relative group">
-                      {profileImagePreview ? (
+            {profileImagePreview ? (
                           <>
                               <img src={profileImagePreview} alt="Profil Önizleme" className="w-full h-full object-cover" />
                               <Button 
@@ -326,25 +326,25 @@ export default function NewEmployeePage() {
                                   <X className="h-4 w-4" />
                               </Button>
                           </>
-                      ) : (
-                          <User className="h-16 w-16 text-gray-400" />
-                      )}
-                  </div>
+            ) : (
+              <User className="h-16 w-16 text-gray-400" />
+            )}
+          </div>
                   <Button type="button" variant="outline" size="sm" onClick={() => profileImageInputRef.current?.click()}>
                       <Upload className="mr-2 h-4 w-4" /> Yükle
-                  </Button>
+            </Button>
                   <Input 
                       id="profilePicture" 
                       name="profilePicture" 
-                      type="file" 
+              type="file"
                       accept="image/*" 
                       onChange={handleProfileImageUpload}
-                      ref={profileImageInputRef}
-                      className="hidden" 
-                  />
+              ref={profileImageInputRef}
+              className="hidden"
+            />
                   <p className="text-xs text-gray-500">Max 2MB. JPG, PNG, GIF.</p>
-              </div>
-              
+        </div>
+
               <div>
                   <Label htmlFor="firstName" className="block text-sm font-medium text-gray-700 mb-1">İsim <span className="text-red-500">*</span></Label>
                   <Input id="firstName" name="firstName" value={newEmployeeForm.firstName ?? ''} onChange={handleInputChange} required />
@@ -360,39 +360,39 @@ export default function NewEmployeePage() {
                <div>
                    <Label htmlFor="password">Şifre <span className="text-red-500">*</span></Label>
                    <Input id="password" name="password" type="password" value={newEmployeeForm.password ?? ''} onChange={handleInputChange} required />
-               </div>
-
-              <div>
+                </div>
+                
+                <div>
                   <Label htmlFor="departmentId">Departman <span className="text-red-500">*</span></Label>
                   <Select name="departmentId" value={newEmployeeForm.departmentId ?? ''} onValueChange={(value) => handleSelectChange("departmentId", value)} required>
                       <SelectTrigger disabled={isLoadingDepartments}>
                           <SelectValue placeholder={isLoadingDepartments ? "Yükleniyor..." : "Departman Seçin"} />
                       </SelectTrigger>
-                      <SelectContent>
+                   <SelectContent>
                           {departments.map(dep => (
                               <SelectItem key={dep.id} value={dep.id}>{dep.name}</SelectItem>
                           ))}
-                      </SelectContent>
-                  </Select>
+                   </SelectContent>
+                </Select>
               </div>
 
-              <div>
+            <div>
                   <Label htmlFor="position">Pozisyon <span className="text-red-500">*</span></Label>
                   <Input id="position" name="position" value={newEmployeeForm.position ?? ''} onChange={handleInputChange} required />
               </div>
               <div>
                   <Label htmlFor="tcKimlikNo">TC Kimlik No <span className="text-red-500">*</span></Label>
                   <Input id="tcKimlikNo" name="tcKimlikNo" value={newEmployeeForm.tcKimlikNo ?? ''} onChange={handleInputChange} maxLength={11} required />
-              </div>
+            </div>
 
               <div>
                   <Label htmlFor="phoneNumber">Telefon Numarası</Label>
                   <Input id="phoneNumber" name="phoneNumber" value={newEmployeeForm.phoneNumber ?? ''} onChange={handleInputChange} />
               </div>
-              <div>
-                  <Label htmlFor="birthDate">Doğum Tarihi</Label>
-                  <Input id="birthDate" name="birthDate" type="date" value={newEmployeeForm.birthDate ?? ''} onChange={handleInputChange} />
-              </div>
+            <div>
+                   <Label htmlFor="birthDate">Doğum Tarihi</Label> 
+                   <Input id="birthDate" name="birthDate" type="date" value={newEmployeeForm.birthDate ?? ''} onChange={handleInputChange} /> 
+                </div>
               <div>
                   <Label htmlFor="hireDate">İşe Giriş Tarihi</Label>
                   <Input id="hireDate" name="hireDate" type="date" value={newEmployeeForm.hireDate ?? ''} onChange={handleInputChange} />
@@ -498,23 +498,23 @@ export default function NewEmployeePage() {
              <User className="mr-2 h-5 w-5 text-orange-600" /> Acil Durum İletişim Bilgileri
            </h2>
            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <div>
-               <Label htmlFor="emergencyContactName">Ad Soyad</Label>
+                <div>
+                             <Label htmlFor="emergencyContactName">Ad Soyad</Label>
                <Input id="emergencyContactName" name="emergencyContactName" value={newEmployeeForm.emergencyContactName ?? ''} onChange={handleInputChange} />
-             </div>
-             <div>
-               <Label htmlFor="emergencyContactPhone">Telefon</Label>
+                    </div>
+                    <div>
+                             <Label htmlFor="emergencyContactPhone">Telefon</Label>
                <Input id="emergencyContactPhone" name="emergencyContactPhone" value={newEmployeeForm.emergencyContactPhone ?? ''} onChange={handleInputChange} />
-             </div>
-             <div>
-               <Label htmlFor="emergencyContactRelation">Yakınlık Derecesi</Label>
+                    </div>
+                    <div>
+                             <Label htmlFor="emergencyContactRelation">Yakınlık Derecesi</Label>
                <Input id="emergencyContactRelation" name="emergencyContactRelation" value={newEmployeeForm.emergencyContactRelation ?? ''} onChange={handleInputChange} />
-             </div>
-           </div>
-         </div>
-
+              </div>
+            </div>
+          </div>
+          
         <div className="bg-white p-6 rounded-lg shadow-md border border-gray-200">
-           <div className="mb-3">
+              <div className="mb-3">
                 <Button
                   type="button"
                   variant="outline"
@@ -569,7 +569,7 @@ export default function NewEmployeePage() {
                 </div>
               )}
         </div>
-
+        
         <div className="flex justify-end space-x-3 mt-8">
           <Button type="button" variant="outline" onClick={() => router.back()} disabled={loading}>
             İptal

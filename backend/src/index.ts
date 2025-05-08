@@ -9,16 +9,24 @@ import { prisma } from './lib/prisma';
 // Tüm route modüllerini import et
 import authRoutes from './routes/auth.routes';
 import userRoutes from './routes/user.routes';
+import roleRoutes from './routes/role.routes';
 import departmentRoutes from './routes/department.routes';
 import employeeRoutes from './routes/employee.routes';
-import attendanceRoutes from './routes/attendance.routes';
+import taskRoutes from './routes/task.routes';
+import projectRoutes from './routes/project.routes';
+import customerRoutes from './routes/customers.routes';
+import proposalRoutes from './routes/proposal.routes';
+import uploadRoutes from './routes/upload.routes';
 import folderRoutes from './routes/folder.routes';
 import documentRoutes from './routes/document.routes';
-import uploadRoutes from './routes/upload.routes';
 import edasRoutes from './routes/edas.routes';
+import purchasingRoutes from './routes/purchasing.routes';
+import marketingRoutes from './routes/marketing-activities.routes';
 import additionalWorkRoutes from './routes/additional-work.routes';
-import proposalRoutes from './routes/proposal.routes';
-import purchasingRouter from './routes/purchasing.routes';
+import progressPaymentRoutes from './routes/progressPayment.routes';
+import annualLeaveRoutes from './routes/annualLeave.routes';
+import attendanceRoutes from './routes/attendance.routes';
+import teknisyenRaporRoutes from './routes/teknisyen-rapor.routes';
 
 // Express uygulamasını oluştur
 const app = express();
@@ -39,16 +47,24 @@ console.log(`[Server] Static files served from: ${path.join(__dirname, '../uploa
 // API Routes - tüm rotaları ekle
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/roles', roleRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/documents', documentRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/departments', departmentRoutes);
 app.use('/api/edas', edasRoutes);
-app.use('/api/attendances', attendanceRoutes);
-app.use('/api/additional-works', additionalWorkRoutes);
+app.use('/api/tasks', taskRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/customers', customerRoutes);
 app.use('/api/proposals', proposalRoutes);
-app.use('/api/purchasing', purchasingRouter);
+app.use('/api/purchasing', purchasingRoutes);
+app.use('/api/marketing', marketingRoutes);
+app.use('/api/additional-work', additionalWorkRoutes);
+app.use('/api/progress-payments', progressPaymentRoutes);
+app.use('/api/annual-leaves', annualLeaveRoutes);
+app.use('/api/attendances', attendanceRoutes);
+app.use('/api/test-raporlar', teknisyenRaporRoutes);
 
 // Sağlık kontrolü
 app.get('/api/health', (req, res) => {

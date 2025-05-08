@@ -4,6 +4,10 @@ import dotenv from 'dotenv';
 import departmentRoutes from './routes/department.routes';
 import userRoutes from './routes/user.routes';
 import attendanceRoutes from './routes/attendance.routes';
+// import progressPaymentRoutes from './routes/progressPayment.routes'; // Yorumlandı
+import customerRoutes from './routes/customers.routes';
+// import proposalRoutes from './routes/proposal.routes'; // Yorumlandı (Eğer import ediliyorsa)
+import authRoutes from './routes/auth.routes';
 
 // Ortam değişkenlerini yükle
 dotenv.config();
@@ -25,10 +29,10 @@ app.use(cors({
 app.use('/api/departments', departmentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/attendances', attendanceRoutes);
-
-// Progress Payments rotasını ekle
-import progressPaymentRoutes from './routes/progressPayment.routes';
-app.use('/api/progress-payments', progressPaymentRoutes);
+// app.use('/api/progress-payments', progressPaymentRoutes); // Yorumlandı
+app.use('/api/customers', customerRoutes);
+// app.use('/api/proposals', proposalRoutes); // Yorumlandı (Eğer kullanılıyorsa)
+app.use('/api/auth', authRoutes);
 
 // ... (hata yönetimi middleware'i)
 

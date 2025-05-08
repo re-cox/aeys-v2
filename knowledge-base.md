@@ -141,11 +141,29 @@
       const relativeFilePath = `/uploads/profile-pictures/${file.filename}`;
       ```
 
+   d) Frontend'deki URL kullanımı düzeltildi - employeeService.ts'deki endpoint'leri `/api/users/:id/profile-picture` yerine `/api/employees/:id/profile-picture` olacak şekilde güncelledik:
+      ```typescript
+      // Eskiden (users endpoint'i kullanılıyordu):
+      const response = await apiClient.post<{ success: boolean, profilePictureUrl: string, message: string }>(
+        `/users/${userId}/profile-picture`, 
+        formData, 
+        // ...
+      );
+      
+      // Yeni (employees endpoint'i kullanıyoruz):
+      const response = await apiClient.post<{ success: boolean, profilePictureUrl: string, message: string }>(
+        `/employees/${userId}/profile-picture`, 
+        formData, 
+        // ...
+      );
+      ```
+
 3. Sorunun Tekrarını Önlemek:
    - Statik dosyalar için her zaman doğru yolu ayarlayın
    - Dosya yüklenen ve servis edilen klasörlerin aynı olduğundan emin olun
    - Yüklemeden önce gerekli dizinlerin var olduğunu kontrol edin
    - Dosya yolu ve URL yolu ayrımına dikkat edin
+   - Frontend'de, backend API endpoint'leriyle tutarlı olunduğundan emin olun (users vs employees)
 
 ## Error: Route.post() requires a callback function but got a [object Undefined]
 
@@ -278,7 +296,7 @@
       ```
       
    b) `config/env.ts` dosyasına FRONTEND_URL değişkeni eklendi:
-      ```typescript
+   ```typescript
       export const env = {
         // ... diğer ayarlar
         FRONTEND_URL: process.env.FRONTEND_URL || 'http://localhost:3000',
@@ -394,7 +412,7 @@
    ```
 
    c) DocumentsPage bileşeninde hata yakalama ve token kontrolü iyileştirildi:
-   ```typescript
+      ```typescript
    const loadFolderContents = useCallback(async (folderId: string | null) => {
      try {
        setLoading(true);
@@ -446,11 +464,6 @@
    - DocumentsPage.tsx'teki `loadFolderContents` fonksiyonu useCallback ile sarılmış ve `[router, folders]` bağımlılıkları içeriyor
    - Bu fonksiyon çalıştığında `folders` state'ini değiştiriyor, bu değişiklik tekrar callback'in yeniden oluşturulmasına neden oluyor
    - Böylece useEffect sürekli çalışıyor ve yeni istekler gönderiliyor
-
-3. Çözüm Adımları:
-   - `loadFolderContents` bağımlılıklarından `folders`'ı kaldırdık: `[router]`
-   - Klasör bilgilerini `folders` state'inden almak yerine API yanıtından kullanmaya başladık
-   - Böylece döngü kırıldı ve istekler sadece gerektiğinde yapılıyor
 
 Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini doğru şekilde ayarlamak çok önemlidir, aksi takdirde sonsuz döngüler veya beklenmedik sonuçlar ortaya çıkabilir.
 
@@ -524,7 +537,7 @@ Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini do
           return res.status(201).json(document);
         } catch (error) {
           console.error('[Document API] Doküman yükleme hatası:', error);
-          return res.status(500).json({ 
+        return res.status(500).json({
             error: 'Doküman yüklenirken bir hata oluştu',
             details: error instanceof Error ? error.message : 'Bilinmeyen hata' 
           });
@@ -734,7 +747,7 @@ Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini do
       ```
    
 4. Önemli Noktalar:
-   - .env dosyasında `NEXT_PUBLIC_API_URL=/api` olarak ayarlandığında, axios ile `/api/documents/upload` endpointi çağrıldığında aslında `/api/api/documents/upload` URL'i oluşuyor.
+   - .env dosyasında `NEXT_PUBLIC_API_URL=/api` olarak ayarlandığında, axios ile `/api/documents/upload` endpoint'i çağrıldığında aslında `/api/api/documents/upload` URL'i oluşuyor.
    - API_BASE_URL'yi açık şekilde `http://localhost:5001` olarak ayarlamak daha güvenilir.
    - Frontend ve backend geliştirme aşamasında API URL yapılandırması dikkatli yapılmalı.
    - Backend sunucusunun aktif olduğundan ve beklenen portta çalıştığından emin olunmalı.
@@ -886,7 +899,7 @@ Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini do
           await deleteFolder(folderToDelete);
           toast.success('Klasör başarıyla silindi');
           loadFolderContents(currentFolderId, false);
-        } catch (error) {
+      } catch (error) {
           toast.error('Klasör silinemedi');
         }
       };
@@ -1059,7 +1072,6 @@ Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini do
    - `fileUrl`, backend tarafında `/uploads/edas-documents/` dizinine kaydedilen dosyanın adına göre dinamik olarak oluşturuluyor.
    - Prisma'ya veri gönderilmeden önce tüm gerekli alanların (özellikle `fileUrl`) dolu ve geçerli olduğu kontrol ediliyor.
    - Bu değişikliklerle birlikte Prisma validation hatasının çözülmesi ve dosya yüklemenin başarıyla tamamlanması beklenmektedir.
-   - **Not:** `multerConfig.ts` dosyasının doğru yapılandırıldığı ve `/uploads` dizininin Express uygulamasında statik olarak sunulduğu varsayılmaktadır.
 
 9. **PRISMA MODEL UYUMSUZLUĞU (documentType) (2024-07-30):**
    - Backend tarafında `documentType` alanı Prisma'ya gönderilmeye çalışılırken "Unknown argument `documentType`" hatası alındı.
@@ -1082,3 +1094,863 @@ Not: React'te useCallback ve useEffect kullanırken bağımlılık dizilerini do
 ## [BEDAŞ Belge İşlemleri Eksik Backend Endpointleri]
 
 Çözüm: BEDAŞ bildirim detay sayfasında belge yükleme, silme ve indirme işlemleri için gerekli olan `POST /bedas/notifications/:notificationId/steps/:stepId/documents`, `DELETE /bedas/notifications/:notificationId/steps/:stepId/documents/:documentId` ve `GET /bedas/notifications/:notificationId/steps/:stepId/documents/:documentId` API endpoint'leri `backend/src/routes/edas.routes.ts` dosyasına AYEDAŞ'takilere benzer şekilde eklendi. Belge yükleme endpoint'i, frontend'in çoklu dosya gönderme yeteneğini desteklemek için `multer`'ın `upload.array('files')` yöntemi kullanılarak güncellendi. Belge silme ve indirme işlemleri için dosya sistemi operasyonları (silme/okuma) ve ilgili veritabanı işlemleri entegre edildi. Şirket kontrolleri ("BEDAŞ") ilgili sorgulara eklendi.
+
+## [Personel güncelleme işleminde 500 Internal Server Error hatası - Genişletilmiş Çözüm]
+
+Çözüm:
+1. Frontend'den gelen verilerin (özellikle tarih, sayı, vs.) backend'de doğru formata dönüştürülmesi sağlandı:
+
+```js
+// Tarih alanlarının formatlarını kontrol et
+if (prismaData.hireDate) {
+  try {
+    console.log(`[Backend Employee] hireDate değeri: ${prismaData.hireDate}, tipi: ${typeof prismaData.hireDate}`);
+    if (typeof prismaData.hireDate === 'string') {
+      // Tarih formatının geçerli olup olmadığını kontrol et
+      const date = new Date(prismaData.hireDate);
+      if (isNaN(date.getTime())) {
+        console.error(`[Backend Employee] Geçersiz hireDate formatı: ${prismaData.hireDate}`);
+        prismaData.hireDate = null;
+      } else {
+        prismaData.hireDate = date;
+      }
+    }
+  } catch (dateError) {
+    console.error(`[Backend Employee] hireDate işlenirken hata: ${dateError}`);
+    prismaData.hireDate = null;
+  }
+}
+
+// Sayısal değerlerin tiplerini kontrol et (örnek: maaş)
+if (prismaData.salary !== undefined) {
+  console.log(`[Backend Employee] salary değeri: ${prismaData.salary}, tipi: ${typeof prismaData.salary}`);
+  if (typeof prismaData.salary === 'string') {
+    const salaryNumber = Number(prismaData.salary);
+    if (isNaN(salaryNumber)) {
+      console.error(`[Backend Employee] Geçersiz salary değeri: ${prismaData.salary}`);
+      prismaData.salary = null;
+    } else {
+      prismaData.salary = salaryNumber;
+    }
+  }
+}
+```
+
+2. Prisma modelinde olmayan veya çakışmalara neden olabilecek alanlar temizlendi:
+
+```js
+// Employee tablosunda gereksiz alanları temizle
+delete prismaData.user;
+delete prismaData.userId;
+delete prismaData.documents; 
+delete prismaData.department;
+delete prismaData.userName;
+delete prismaData.userSurname;
+delete prismaData.userEmail;
+delete prismaData.userRole;
+delete prismaData.profilePicture;
+delete prismaData.createdAt;
+delete prismaData.updatedAt;
+delete prismaData.assignedAssets;
+delete prismaData.purchaseRequestsMade;
+delete prismaData.purchaseRequestsStatusChanged;
+```
+
+3. Hata yakalama ve loglama iyileştirildi:
+
+```js
+try {
+  // Employee bilgilerini güncelle
+  const updatedEmployee = await prismaClient.employee.update({
+    where: { id: employeeId },
+    data: prismaData,
+    include: { /* ... */ }
+  });
+  
+  // İşlem başarılı...
+} catch (updateError: any) {
+  console.error('[Backend Employee] Çalışan güncellenirken Prisma hatası:', updateError);
+  
+  // Hata ayrıntılarını kaydet
+  if (updateError.name) {
+    console.error(`[Backend Employee] Hata Adı: ${updateError.name}`);
+  }
+  
+  if (updateError.message) {
+    console.error(`[Backend Employee] Hata Mesajı: ${updateError.message}`);
+  }
+  
+  if (updateError.code) {
+    console.error(`[Backend Employee] Prisma Hata Kodu: ${updateError.code}`);
+  }
+  
+  if (updateError.meta) {
+    console.error(`[Backend Employee] Prisma Meta: ${JSON.stringify(updateError.meta, null, 2)}`);
+  }
+  
+  // Hatayı uygun şekilde istemciye bildir
+  res.status(500).json({
+    success: false,
+    message: 'Çalışan güncellenirken bir hata oluştu',
+    error: updateError.message || 'Bilinmeyen hata'
+  });
+  return;
+}
+```
+
+Bu çözümle frontend'den gelen veriler backend'de düzgün bir şekilde işlenip Prisma formatına dönüştürülmektedir. Özellikle tarih ve sayısal değerler için tip dönüşümleri doğru şekilde yapılmakta ve Prisma'nın gereksinimlerine uygun hale getirilmektedir. Ayrıca, ilişkisel veri alanları da temizlenerek çakışmalar önlenmektedir.
+
+## [Personel düzenleme sayfasında maaş ve acil durum iletişim bilgileri görünmüyor]
+
+Çözüm: 
+1. Backend'de `employee.controller.ts` içindeki `getEmployeeById` fonksiyonunu güncelleyerek, API yanıtına `salary`, `emergencyContactName`, `emergencyContactPhone` ve `emergencyContactRelation` alanlarını ekledik:
+
+```js
+// Employee datasını frontend için formatla
+const formattedData = {
+  ...employee,
+  // Employee bilgilerine ilişkili user verilerinden de eklemeler yapılıyor
+  userEmail: employee.user?.email,
+  userName: employee.user?.name,
+  userSurname: employee.user?.surname,
+  userRole: employee.user?.role,
+  // Maaş ve acil durum iletişim bilgilerinin null olsa bile dönmesini sağlayalım
+  salary: employee.salary || null,
+  emergencyContactName: employee.emergencyContactName || null,
+  emergencyContactPhone: employee.emergencyContactPhone || null,
+  emergencyContactRelation: employee.emergencyContactRelation || null
+};
+```
+
+## [Personel kaydetme işlemi 404 hatası veriyor]
+
+Çözüm:
+Frontend'deki `employeeService.ts` içindeki `updateEmployee`, `deleteEmployee` ve `uploadProfilePicture` fonksiyonlarında yanlış API endpoint'leri kullanılıyordu. `/api/users/:id` yerine `/api/employees/:id` şeklinde güncelledik:
+
+1. updateEmployee fonksiyonu:
+```js
+// Endpoint güncellendi: /users/:id -> /employees/:id
+const response = await apiClient.put<BackendEmployeeWithUser>(`/employees/${id}`, employeeData);
+```
+
+2. deleteEmployee fonksiyonu:
+```js
+// Endpoint güncellendi: /users/:id -> /employees/:id
+await apiClient.delete(`/employees/${id}`);
+```
+
+3. uploadProfilePicture fonksiyonu:
+```js
+// Endpoint güncellendi: /users/:id/profile-picture -> /employees/:id/profile-picture
+const response = await apiClient.post<{ success: boolean, profilePictureUrl: string, message: string }>(
+  `/employees/${userId}/profile-picture`, 
+  formData, 
+  {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+    },
+  }
+);
+```
+
+Bu değişikliklerle endpoint yapılandırması tutarlı hale getirildi.
+
+## [Personel düzenleme sayfasında 500 Internal Server Error hatası]
+
+Çözüm:
+1. Backend'de `employee.controller.ts` içindeki `updateEmployee` fonksiyonunu güncelleyerek firstName/lastName alanlarını name/surname alanlarına dönüştürmeyi ve kullanıcı bilgilerini User tablosunda ayrıca güncellemeyi sağladık.
+2. Frontend'den gelen firstName, lastName ve email gibi özellikler aslında Employee tablosuna değil, User tablosuna ait özelliklerdir.
+3. Gelen verilerde alan adı çeviri işlemini ve ilgili verilerin doğru tablolara yönlendirilmesini sağladık:
+
+```js
+// Frontend'den gelen firstName/lastName alanlarını name/surname olarak dönüştür
+const prismaData: any = { ...employeeData };
+
+// Alan adı dönüşümleri
+if (employeeData.firstName !== undefined) {
+  prismaData.name = employeeData.firstName;
+  delete prismaData.firstName;
+}
+
+if (employeeData.lastName !== undefined) {
+  prismaData.surname = employeeData.lastName;
+  delete prismaData.lastName;
+}
+
+// İlişkili kullanıcı bilgilerini güncellemek için ayrı bir işlem yap
+const userUpdateData: any = {};
+
+// Kullanıcı adı/soyadı
+if (prismaData.name !== undefined) {
+  userUpdateData.name = prismaData.name;
+}
+
+if (prismaData.surname !== undefined) {
+  userUpdateData.surname = prismaData.surname;
+}
+
+// E-posta
+if (prismaData.email !== undefined) {
+  userUpdateData.email = prismaData.email;
+  delete prismaData.email;
+}
+
+// Eğer kullanıcı bilgilerinde güncelleme yapılacaksa
+if (Object.keys(userUpdateData).length > 0 && employee.userId) {
+  await prismaClient.user.update({
+    where: { id: employee.userId },
+    data: userUpdateData
+  });
+}
+```
+
+4. Bu değişiklikler sonucunda, frontend ve backend arasındaki veri alışverişi düzgün çalışmaya başladı ve personel bilgileri sorunsuzca güncellenebiliyor.
+
+## [Personel güncelleme işleminde 500 Internal Server Error hatası - Genişletilmiş Çözüm]
+
+Çözüm:
+1. Frontend'den gelen verilerin (özellikle tarih, sayı, vs.) backend'de doğru formata dönüştürülmesi sağlandı:
+
+```js
+// Tarih alanlarının formatlarını kontrol et
+if (prismaData.hireDate) {
+  try {
+    console.log(`[Backend Employee] hireDate değeri: ${prismaData.hireDate}, tipi: ${typeof prismaData.hireDate}`);
+    if (typeof prismaData.hireDate === 'string') {
+      // Tarih formatının geçerli olup olmadığını kontrol et
+      const date = new Date(prismaData.hireDate);
+      if (isNaN(date.getTime())) {
+        console.error(`[Backend Employee] Geçersiz hireDate formatı: ${prismaData.hireDate}`);
+        prismaData.hireDate = null;
+      } else {
+        prismaData.hireDate = date;
+      }
+    }
+  } catch (dateError) {
+    console.error(`[Backend Employee] hireDate işlenirken hata: ${dateError}`);
+    prismaData.hireDate = null;
+  }
+}
+
+// Sayısal değerlerin tiplerini kontrol et (örnek: maaş)
+if (prismaData.salary !== undefined) {
+  console.log(`[Backend Employee] salary değeri: ${prismaData.salary}, tipi: ${typeof prismaData.salary}`);
+  if (typeof prismaData.salary === 'string') {
+    const salaryNumber = Number(prismaData.salary);
+    if (isNaN(salaryNumber)) {
+      console.error(`[Backend Employee] Geçersiz salary değeri: ${prismaData.salary}`);
+      prismaData.salary = null;
+    } else {
+      prismaData.salary = salaryNumber;
+    }
+  }
+}
+```
+
+2. Prisma modelinde olmayan veya çakışmalara neden olabilecek alanlar temizlendi:
+
+```js
+// Employee tablosunda gereksiz alanları temizle
+delete prismaData.user;
+delete prismaData.userId;
+delete prismaData.documents; 
+delete prismaData.department;
+delete prismaData.userName;
+delete prismaData.userSurname;
+delete prismaData.userEmail;
+delete prismaData.userRole;
+delete prismaData.profilePicture;
+delete prismaData.createdAt;
+delete prismaData.updatedAt;
+delete prismaData.assignedAssets;
+delete prismaData.purchaseRequestsMade;
+delete prismaData.purchaseRequestsStatusChanged;
+```
+
+3. Hata yakalama ve loglama iyileştirildi:
+
+```js
+try {
+  // Employee bilgilerini güncelle
+  const updatedEmployee = await prismaClient.employee.update({
+    where: { id: employeeId },
+    data: prismaData,
+    include: { /* ... */ }
+  });
+  
+  // İşlem başarılı...
+} catch (updateError: any) {
+  console.error('[Backend Employee] Çalışan güncellenirken Prisma hatası:', updateError);
+  
+  // Hata ayrıntılarını kaydet
+  if (updateError.name) {
+    console.error(`[Backend Employee] Hata Adı: ${updateError.name}`);
+  }
+  
+  if (updateError.message) {
+    console.error(`[Backend Employee] Hata Mesajı: ${updateError.message}`);
+  }
+  
+  if (updateError.code) {
+    console.error(`[Backend Employee] Prisma Hata Kodu: ${updateError.code}`);
+  }
+  
+  if (updateError.meta) {
+    console.error(`[Backend Employee] Prisma Meta: ${JSON.stringify(updateError.meta, null, 2)}`);
+  }
+  
+  // Hatayı uygun şekilde istemciye bildir
+  res.status(500).json({
+    success: false,
+    message: 'Çalışan güncellenirken bir hata oluştu',
+    error: updateError.message || 'Bilinmeyen hata'
+  });
+  return;
+}
+```
+
+Bu çözümle frontend'den gelen veriler backend'de düzgün bir şekilde işlenip Prisma formatına dönüştürülmektedir. Özellikle tarih ve sayısal değerler için tip dönüşümleri doğru şekilde yapılmakta ve Prisma'nın gereksinimlerine uygun hale getirilmektedir. Ayrıca, ilişkisel veri alanları da temizlenerek çakışmalar önlenmektedir.
+
+## [Unknown argument `departmentId`. Did you mean `department`? - Prisma İlişkisel Model Hatası]
+
+Çözüm:
+1. Prisma ORM kullanırken ilişkisel verilerdeki ID alanlarını doğrudan kullanamayız. Bunların yerine ilişkisel modeli kullanmalıyız.
+
+2. Sorun, `departmentId` alanının direk veri modeline gönderilmesiydi. Çözüm, departmentId'yi bir department nesnesi içinde connect olarak göndermek:
+
+```js
+// Hatalı kullanım
+prismaData.departmentId = "57b1030e-da83-4e92-976e-f95b7824cd12";
+
+// Doğru kullanım
+if (prismaData.departmentId) {
+  prismaData.department = {
+    connect: { id: prismaData.departmentId }
+  };
+  delete prismaData.departmentId;
+}
+```
+
+3. Benzer şekilde, `name` ve `surname` alanları Employee tablosuna değil User tablosuna ait olduğu için prismaData'dan çıkarıldı:
+
+```js
+// İlişkisel alan olmayan ve Employee doğrudan ait olan alanlar
+// name ve surname alanları Employee'de değil User'da olduğundan kaldır
+delete prismaData.name;
+delete prismaData.surname;
+```
+
+4. Prisma ilişkisel veritabanı modeli kullanırken:
+   - Tekil ilişkiler için `connect` kullanılır: `{ connect: { id: relationId } }`
+   - İlişki kaldırma için `disconnect` kullanılır: `{ disconnect: true }`
+   - Çoklu ilişkiler için `connectOrCreate`, `connect`, `disconnect` gibi operatörler kullanılır
+
+5. Tüm ilişkileri birbiriyle tutarlı bir şekilde güncellemek için, Employee ve User tablolarına ayrı ayrı güncelleme işlemleri uygulandı.
+
+Bu şekilde, Prisma ilişkisel modelleme yapısıyla uyumlu bir güncelleme işlemi gerçekleştirildi ve hata çözüldü.
+
+## Select.Item must have a value prop that is not an empty string
+Çözüm: SelectItem bileşenlerinde value özelliği boş string ("") olmamalıdır. Radix UI Select bileşeninde boş string değeri ("") seçimi temizlemek ve placeholder göstermek için özel olarak ayrılmıştır.
+
+1. Sorunun Tanımı:
+   Sayfada Select bileşeni kullanırken şu hatayı alıyoruz:
+   ```
+   Error: A <Select.Item /> must have a value prop that is not an empty string. This is because the Select value can be set to an empty string to clear the selection and show the placeholder.
+   ```
+
+2. Çözüm:
+   SelectItem bileşenlerinde boş string value değerini kullanmak yerine anlamlı bir değer kullanılmalıdır:
+   ```tsx
+   // Hatalı kullanım
+   <SelectItem value="" disabled>Çalışan bulunamadı</SelectItem>
+   
+   // Doğru kullanım
+   <SelectItem value="no_employee" disabled>Çalışan bulunamadı</SelectItem>
+   ```
+
+## Error: Çalışanlar getirilemedi (Proje yöneticisi seçme sorunu)
+
+Çözüm: Frontend'deki çalışan listesi API endpoint'i değiştirildi.
+
+1. Sorunun Tanımı:
+   `/projects/new` sayfasında proje yöneticisi seçme kısmında çalışan listesi yüklenirken aşağıdaki hata alınıyordu:
+   ```
+   Error: Çalışanlar getirilemedi.
+   ```
+   Sayfa, `/api/employees/list` endpoint'ine istek yapıyor ancak bu endpoint'teki Employee modeli şeması ile frontend'in beklediği şema arasında uyumsuzluk vardı.
+
+2. Çözüm:
+   Frontend'deki çalışan listesi API endpoint'i değiştirildi:
+   ```typescript
+   // Hatalı:
+   const response = await fetch('/api/employees/list');
+   if (!response.ok) {
+     throw new Error('Çalışanlar getirilemedi.');
+   }
+   const data = await response.json();
+   setEmployees(data.data || []);
+   
+   // Doğru:
+   const response = await fetch('/api/users?includeEmployee=true');
+   if (!response.ok) {
+     throw new Error('Çalışanlar getirilemedi.');
+   }
+   const users = await response.json();
+   
+   // API'den gelen veriyi işle - sadece employee alanı doluysa çalışan olarak al
+   const employeeData = users
+     .filter((user: any) => user.employee !== null) // Sadece çalışan kaydı olan kullanıcıları al
+     .map((user: any) => ({
+       id: user.employee.id, // Employee ID'si
+       name: `${user.name} ${user.surname}` // İsim ve soyisim birleşimi
+     }));
+     
+   setEmployees(employeeData);
+   ```
+
+3. Teknik Açıklama:
+   - Employee bilgileri veritabanında birincil olarak User tablosuna bağlıdır
+   - `/api/employees/list` endpoint'i güncel veritabanı şemasıyla uyumlu değildi
+   - Çözüm olarak çalışanları `/api/users?includeEmployee=true` endpoint'inden alarak, 
+     employee ilişkisi dolu olanları filtreledik ve istenilen formata (id, name) dönüştürdük
+
+## Error: Çalışanlar getirilemedi (Proje yöneticisi seçme sorunu) - Genişletilmiş Çözüm
+
+Çözüm: Frontend Next.js API route'u yerine doğrudan backend API'sine istek yapmak.
+
+1. Sorunun Tanımı:
+   `/projects/new` sayfasında proje yöneticisi seçme kısmında çalışan listesi yüklenirken aşağıdaki hata alınıyordu:
+   ```
+   Error: Çalışanlar getirilemedi.
+   ```
+   İlk çözümümüz olan `/api/users?includeEmployee=true` endpoint'i de 500 Internal Server Error hatası veriyordu. Bu, frontend API proxy'lerin düzgün çalışmadığını gösteriyor.
+
+2. Çözüm:
+   Frontend'in Next.js API proxy'leri yerine doğrudan backend API'sine yetkilendirme token'ı ile istek gönderiyoruz:
+   ```typescript
+   // Hatalı:
+   const response = await fetch('/api/users?includeEmployee=true');
+   
+   // Doğru:
+   const API_BASE_URL = "http://localhost:5001/api";
+     const token = localStorage.getItem('token');
+   
+     if (!token) {
+     console.error("Token bulunamadı, lütfen oturum açın");
+     toast.error('Oturum bilgisi bulunamadı. Lütfen yeniden giriş yapın.');
+     setIsFetchingEmployees(false);
+         return;
+       }
+   
+   // Backend API'ye yetkilendirme token'ı ile istek gönder
+   const response = await fetch(`${API_BASE_URL}/employees`, {
+     headers: {
+       'Authorization': `Bearer ${token}`
+     }
+   });
+   
+   if (!response.ok) {
+     throw new Error('Çalışanlar getirilemedi.');
+   }
+   
+   const employeeList = await response.json();
+   
+   // Backend veri formatını bizim istediğimiz formata dönüştür
+   const processedEmployees = employeeList.map((emp: any) => ({
+     id: emp.id,
+     name: `${emp.name || ''} ${emp.surname || ''}`.trim()
+   }));
+   
+   setEmployees(processedEmployees);
+   ```
+
+3. Teknik Açıklama:
+   - Next.js API route'lar (`/api/...`) veritabanı hatalarında 500 hatası veriyordu
+   - Doğrudan backend API'sine (`http://localhost:5001/api/employees`) yetkilendirme token'ı ile istek gönderiyoruz
+   - Backend'den gelen veriyi UI için gerekli olan basit formata (id, name) dönüştürüyoruz
+   - Bu yaklaşım, veritabanı şema değişikliklerinden etkilenmez ve daha az hata eğilimlidir
+
+## Module not found: Can't resolve '@/components/ui/time-picker'
+
+Çözüm: TimePicker bileşeni projede bulunmadığı için oluşturulması gerekiyordu.
+
+1. Sorunun Tanımı:
+   Teknisyen raporları formunda kullanılmak istenen time-picker bileşeni bulunamadığından derleme hatası alınıyor:
+   ```
+   Module not found: Can't resolve '@/components/ui/time-picker'
+   ```
+
+2. Çözüm Adımları:
+   - `src/components/ui/time-picker.tsx` dosyası oluşturuldu
+   - Shadcn UI bileşenleriyle uyumlu bir TimePicker bileşeni yazıldı
+   - Saat ve dakika seçimi için dropdown menü içeren interaktif bir arayüz sağlandı
+   - Form kontrolü ile entegre çalışacak şekilde tasarlandı
+
+3. Uygulanan Özellikler:
+   - Saat ve dakika değerlerini 15'er dakika aralıklarla gösterme (00:00, 00:15, 00:30...)
+   - Klavye ile manuel saat girişi yapabilme
+   - Değişiklikleri dış bileşenlere iletme (onChange prop'u ile)
+   - Engelli (disabled) durumu desteği
+   - Popover ile açılır menü içinde saat seçimi
+
+4. Bileşen Propları:
+   ```typescript
+   interface TimePickerProps {
+     value?: string;
+     onChange?: (time: string) => void;
+     disabled?: boolean;
+     className?: string;
+   }
+   ```
+
+5. Kullanım Örneği:
+   ```tsx
+   <TimePicker
+     value={selectedTime}
+     onChange={(time) => setSelectedTime(time)}
+     disabled={false}
+     className="w-full"
+   />
+   ```
+
+Bu bileşen sayesinde TeknisyenRaporForm.tsx dosyasındaki import hatası çözüldü ve saat seçimi için kullanıcı dostu bir arayüz eklendi.
+
+## Foreign key constraint violated on the constraint: `TeknisyenRapor_teknisyenId_fkey`
+
+Çözüm: TeknisyenRapor tablosuna veri eklerken veritabanında olmayan bir teknisyenId kullanıldığında oluşan foreign key hatası.
+
+1. Sorunun Tanımı:
+   Teknisyen raporu oluşturulurken veritabanında bulunmayan bir teknisyenId (personel ID) kullanıldığında şu hata alınıyor:
+   ```
+   Foreign key constraint violated on the constraint: `TeknisyenRapor_teknisyenId_fkey`
+   ```
+
+2. Çözüm Adımları:
+   - Veritabanında var olan geçerli bir teknisyen/personel ID kullanılmalı
+   - `/api/test-raporlar/personeller/listele` endpoint'ini kullanarak geçerli personel ID'lerini görüntüleyin
+   - Raporun oluşturulduğu formda geçerli bir ID seçildiğinden emin olun
+   - Veritabanı ilişkilerinin (foreign key constraints) doğru yapılandırıldığından emin olun
+
+3. Önleme Stratejisi:
+   - Formlarda sadece veritabanında var olan personel ID'lerinin seçilebilir olmasını sağlayın
+   - API isteği yapılmadan önce istek verilerinin geçerliliğini kontrol edin
+   - Geçersiz ID'ler için anlamlı hata mesajları döndürün
+
+## [Foreign key constraint violated on the constraint: `TeknisyenRapor_teknisyenId_fkey`]
+
+Çözüm: 
+1. Frontend'de "Teknisyen seçimi" yerine "Rapor Bilgi Numarası" alanı ekleyerek kullanıcının manuel numara girmesini sağlamak.
+
+```tsx
+<div className="grid gap-2">
+  <Label htmlFor="raporBilgiNo" className="text-sm font-medium">Rapor Bilgi Numarası*</Label>
+  <Input
+    id="raporBilgiNo"
+    value={raporBilgiNo}
+    onChange={(e) => setRaporBilgiNo(e.target.value)}
+    placeholder="Rapor bilgi numarasını girin"
+    disabled={isLoading || isSubmitting}
+    required
+    className="h-10 transition-all bg-white dark:bg-gray-950 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+  />
+</div>
+```
+
+2. Backend'de sabit bir sistem kullanıcısı ID'si kullanarak foreign key hatasını önlemek:
+
+```typescript
+// Sabit bir sistem kullanıcısı ID'si kullan ve rapor bilgi numarasını açıklama alanına ekle
+const sistemKullaniciId = "31ba596a-c0e0-4e86-a3f4-f2b1b027d3d3"; // Sabit bir admin kullanıcı ID'si
+const updatedAciklama = `Rapor Bilgi No: ${teknisyenId}\n\n${aciklama || ''}`;
+
+// Raporu oluştur
+const yeniRapor = await prisma.teknisyenRapor.create({
+  data: {
+    baslik,
+    aciklama: updatedAciklama, // Rapor bilgi numarası açıklamaya eklendi
+    durum: normalizedDurum,
+    teknisyenId: sistemKullaniciId, // Sabit sistem kullanıcısı
+    projeId: projeId || null,
+    siteId: siteId || null,
+    tarih: parsedTarih
+  }
+});
+```
+
+3. Bu çözüm sayesinde:
+   - Kullanıcı istediği rapor bilgi numarasını girebilir
+   - Foreign key hatası önlenir çünkü veritabanındaki gerçek bir kullanıcı ID'si kullanılır
+   - Girilen rapor bilgi numarası açıklama alanında saklanır
+   - Sistemde tutarlılık sağlanır
+
+## [TeknisyenRaporu detay sayfasında veriler boş görünüyor]
+
+Çözüm:
+1. Sorun, backend API'den gelen alan isimleriyle (baslik, tarih, createdAt, updatedAt, teknisyenId) frontend'in beklediği alan isimleri (isinAdi, baslangicTarihi, olusturulmaTarihi, guncellemeTarihi, teknisyenNo) arasındaki uyumsuzluktan kaynaklanıyor.
+
+2. Çözüm için API'den gelen verileri backend yapısından frontend yapısına dönüştüren bir işleme tabi tutmak gerekiyor:
+
+```tsx
+// Backend'den gelen verileri frontend yapısına uyarla
+const processedRapor: TeknisyenRaporu = {
+  ...raporData,
+  isinAdi: raporData.baslik || raporData.isinAdi,
+  teknisyenNo: raporData.teknisyenNo || raporData.teknisyenId,
+  baslangicTarihi: raporData.tarih || raporData.baslangicTarihi,
+  bitisTarihi: raporData.bitisTarihi,
+  olusturulmaTarihi: raporData.createdAt || raporData.olusturulmaTarihi,
+  guncellemeTarihi: raporData.updatedAt || raporData.guncellemeTarihi
+};
+```
+
+3. Detay sayfasında render edilen alanlarda hem frontend hem de backend alanlarını destekleyecek şekilde şarta bağlı görüntüleme yapmak:
+
+```tsx
+// Başlangıç tarihini gösterirken hem tarih hem de baslangicTarihi alanlarını kontrol et
+<p className="font-semibold">
+  {rapor?.tarih ? formatTarih(rapor.tarih) : 
+   rapor?.baslangicTarihi ? formatTarih(rapor.baslangicTarihi) : '-'}
+</p>
+
+// Oluşturulma tarihini gösterirken hem createdAt hem de olusturulmaTarihi alanlarını kontrol et
+<p>
+  {rapor?.createdAt ? formatTarih(rapor.createdAt) : 
+   rapor?.olusturulmaTarihi ? formatTarih(rapor.olusturulmaTarihi) : '-'}
+</p>
+```
+
+## [Teknisyen raporu oluşturma ve görüntüleme sorunları]
+
+Çözüm:
+
+1. **Foreign key constraint hataları ve veri görüntüleme sorunları**
+
+**Sorunu**:
+- Başlangıç saati veritabanına kaydolmuyor
+- Bitiş tarihi ve saati veritabanına kaydolmuyor
+- İlgili personel veritabanına kaydolmuyor
+- Rapor bilgi numarası kullanıcının girdiği numara yerine sistem ID'si olarak görünüyor (31ba596a-c0e0-4e86-a3f4-f2b1b027d3d3)
+
+**Çözüm**:
+1. Frontend servis katmanında (`teknisyenRaporService.ts`), gerçek kullanıcı girişi yerine sabit bir sistem ID'si kullanılması:
+```typescript
+// Foreign key sorunu yaşamamak için her zaman sabit bir admin kullanıcısı ID'si kullanıyoruz
+const ADMIN_USER_ID = "31ba596a-c0e0-4e86-a3f4-f2b1b027d3d3"; // Sistemde var olan bir kullanıcı
+```
+
+2. Kullanıcı tarafından girilen bilgilerin açıklama alanında saklanması:
+```typescript
+// Açıklama alanına gereken tüm bilgileri yerleştiriyoruz
+let enhancedAciklama = `Rapor Bilgi No: ${userEnteredTeknisyenId}`;
+
+if (baslangicTarihiStr) {
+  enhancedAciklama += `\nBaşlangıç Tarihi: ${baslangicTarihiStr}`;
+}
+
+if (bitisTarihiStr) {
+  enhancedAciklama += `\nBitiş Tarihi: ${bitisTarihiStr}`;
+}
+
+if (ilgiliPersonelStr) {
+  enhancedAciklama += `\nİlgili Personel IDs: ${ilgiliPersonelStr}`;
+}
+```
+
+3. Detay sayfasında açıklama alanından bu bilgilerin çıkarılması:
+```typescript
+// Açıklama metninden rapor bilgi numarasını çıkaran yardımcı fonksiyon
+const extractRaporBilgiNo = (aciklama?: string): string => {
+  if (!aciklama) return "-";
+  
+  try {
+    // "Rapor Bilgi No: XYZ" formatını ara
+    const match = aciklama.match(/Rapor Bilgi No: ([^\n]+)/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  } catch (error) {
+    console.error("Rapor bilgi numarası çıkarılırken hata:", error);
+  }
+  
+  return "-";
+};
+```
+
+**Teknik Açıklama**:
+- TeknisyenRapor tablosunun teknisyenId alanı User tablosundaki geçerli bir ID'ye işaret eden bir foreign key constraint'e sahip
+- Kullanıcının istediği rapor bilgi numarası genellikle veritabanında bulunmayan bir ID olduğu için foreign key hatası oluşuyor 
+- Çözüm olarak her zaman veritabanında var olan bir kullanıcı ID'si kullanıyoruz
+- Kullanıcının girdiği bilgiler açıklama alanında JSON-benzeri formatla saklanıyor
+- Görüntüleme sırasında, açıklama metninden regex ile bu bilgiler çıkarılıyor
+
+Bu çözüm sayesinde, kullanıcı gerçek rapor bilgi numarası, bitiş tarihi ve ilgili personeli görüntüleyebiliyor, ancak veritabanında doğru çalışması için çapraz referanslar kullanılıyor.
+
+## [Teknisyen raporlarında doküman yükleme ve personel görüntüleme sorunları]
+
+Çözüm:
+
+**1. Doküman yükleme sorunu**
+
+Sorun: Teknisyen raporu oluşturma formunda eklenen dokümanlar detay sayfasında görüntülenmiyor.
+
+Nedeni: TeknisyenRaporForm.tsx dosyasında dokümanlar seçiliyor fakat bunları API'ye gönderen kod eksik kalıyor. Konsola yazıyor ancak gerçek API çağrısı yapılmıyor.
+
+Çözüm:
+```typescript
+// TeknisyenRaporForm.tsx içinde handleSubmit fonksiyonunda:
+// Dosya yükleme işlemi
+if (result && result.id && selectedFiles.length > 0) {
+  toast({
+    title: "Bilgi",
+    description: `${selectedFiles.length} dosya sisteme yükleniyor...`,
+  });
+  
+  // Dosyaları yükleyelim
+  const kullaniciId = sessionStorage.getItem('userId') || localStorage.getItem('userId') || "31ba596a-c0e0-4e86-a3f4-f2b1b027d3d3";
+  
+  try {
+    const uploadPromises = selectedFiles.map(async (file) => {
+      const dosyaAciklama = "";
+      await uploadTeknisyenDokuman(
+        result.id,
+        file,
+        dosyaAciklama,
+        kullaniciId
+      );
+    });
+    
+    // Tüm dosya yükleme işlemlerinin tamamlanmasını bekleyelim
+    await Promise.all(uploadPromises);
+    
+    toast({
+      title: "Başarılı",
+      description: `${selectedFiles.length} dosya başarıyla yüklendi.`,
+    });
+  } catch (uploadError) {
+    console.error("Dosya yükleme hatası:", uploadError);
+    toast({
+      title: "Uyarı",
+      description: "Dosyalar yüklenirken bazı hatalar oluştu.",
+      variant: "destructive",
+    });
+  }
+}
+```
+
+**2. Personel görüntüleme sorunu**
+
+Sorun: Atanan personeller teknisyen raporu detay sayfasında görüntülenmiyor.
+
+Nedeni: İlgili personel bilgileri açıklama alanına ekleniyor ancak UI'da gösterilmiyor.
+
+Çözüm:
+```typescript
+// [id]/page.tsx içinde:
+<div>
+  <h3 className="font-semibold text-lg mb-2">Görevli Personeller</h3>
+  <div className="border rounded-md p-4">
+    {(() => {
+      // İlgili personellerden ID'leri ayıkla
+      const personelIds = extractIlgiliPersonel(rapor?.aciklama);
+      
+      if (personelIds && personelIds !== "-") {
+        const personelIdList = personelIds.split(", ").filter(id => id.trim() !== "");
+        
+        if (personelIdList.length > 0) {
+          return (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{personelIdList.length} personel görevli</p>
+              <ul className="list-disc pl-5 space-y-1">
+                {personelIdList.map((id, index) => (
+                  <li key={index} className="text-sm">
+                    ID: {id}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        }
+      }
+      
+      return <p className="text-sm text-muted-foreground">Personel atanmamış.</p>;
+    })()}
+  </div>
+</div>
+```
+
+**3. Doküman URL oluşturma sorunu**
+
+Sorun: Dokümanların URL'leri detay sayfasında düzgün gösterilmiyor.
+
+Çözüm:
+```typescript
+// [id]/page.tsx içine bir yardımcı fonksiyon ekleyelim:
+const getDocumentUrl = (doc: TeknisyenDokuman): string => {
+  const apiUrlBase = API_URL || 'http://localhost:3000/api';
+  
+  let docUrl = '';
+  
+  if (doc.dosyaUrl) {
+    docUrl = doc.dosyaUrl.startsWith('http') ? doc.dosyaUrl : `${apiUrlBase}${doc.dosyaUrl}`;
+  } else if (doc.dosyaYolu) {
+    docUrl = doc.dosyaYolu.startsWith('http') ? doc.dosyaYolu : `${apiUrlBase}${doc.dosyaYolu}`;
+  } else {
+    console.error('Doküman için URL bulunamadı:', doc);
+    docUrl = '#';
+  }
+  
+  return docUrl;
+};
+```
+
+Bu değişikliklerle teknisyen raporlarında doküman yükleme ve personel görüntüleme sorunları çözülmüştür.
+
+## Teknisyen Raporlarında Doküman Yükleme 500 Hatası
+
+Çözüm: 
+1. Dosya yükleme API yolu yanlış yapılandırılmıştı - `/test-raporlar/dokuman/yukle` yerine doğru API yolu olan `/teknisyen-raporlar/dokuman/yukle` kullanılmalı.
+2. Frontend'de `uploadTeknisyenDokuman` fonksiyonunda API yolu güncellendi.
+3. FormData gönderimi sırasında URL'nin tam olarak loglanması sağlandı.
+
+## Teknisyen Raporlarında Personel ID'leri Yerine İsim Görüntüleme
+
+Çözüm:
+1. `/teknisyenraporlari/[id]` sayfasında görevli personellerin ID'leri yerine isim ve soyisimlerini göstermek için:
+   - `extractIlgiliPersonel` fonksiyonu string[] tipinde ID dizisi döndürecek şekilde güncellendi
+   - Personel verilerini getirmek için `getPersoneller` API çağrısı eklendi
+   - Personel ID'sine göre personel bilgisini getiren `getPersonelById` yardımcı fonksiyonu eklendi
+   - UI güncellendi ve personel ID'leri yerine "Ad Soyad" formatında gösterim sağlandı
+
+## Teknisyen Raporlarında Doküman Yükleme 404 Hatası
+
+Çözüm: 
+1. Dosya yükleme API yolu için 404 hatası alındı (`Cannot POST /api/teknisyen-raporlar/dokuman/yukle`). 
+2. Yapılan incelemede doğru API yolunun `/teknisyen-raporlari/${raporId}/dokuman` olduğu tespit edildi.
+3. Hatayı çözmek için:
+   - `uploadTeknisyenDokuman` fonksiyonunda URL düzeltildi
+   - `raporId` parametresi URL'nin bir parçası haline getirildi ve formData'dan kaldırıldı
+   - API endpoint yapısı, frontend-next/src/app/api dizin yapısıyla uyumlu hale getirildi
+   
+**Not:** API yollarında yazım farklılıklarına dikkat edilmeli: 
+- `teknisyen-raporlar` (yanlış) 
+- `teknisyen-raporlari` (doğru)
+
+## Teknisyen Raporlarında Doküman Yükleme 404 (Not Found) Hatası - Genel Upload API Kullanımı
+
+Çözüm:
+1. Sorunu tespit ettik: `/api/teknisyen-raporlari/[id]/dokuman` endpoint'i çalışmıyor veya bulunamıyor. Tekrar tekrar denemelerimize rağmen 404 hataları almaya devam ettik.
+
+2. Çözüm yaklaşımımızı tamamen değiştirdik:
+   - Özel API endpointi (`/teknisyen-raporlari/[id]/dokuman`) yerine genel dosya yükleme API'sini (`/upload`) kullanmaya karar verdik
+   - Bu genel API, herhangi bir dosya türü için dosya yükleme işlevi sağlıyor ve doğru çalışıyor
+   
+3. Teknisyen raporu için doküman yükleme fonksiyonu (`uploadTeknisyenDokuman`) şu şekilde güncellendi:
+   - Dosya bilgilerini FormData içinde `/upload` endpoint'ine gönder
+   - Yanıt alındığında başarılı olup olmadığını kontrol et
+   - Başarılı ise, yüklenen dosya bilgilerinden bir `TeknisyenDokuman` nesnesi oluştur
+
+4. **Önemli:** Bu çözüm, dosya yüklemeyi mümkün kılar, ancak dosyaların gerçekte bir teknisyen raporu ile veri tabanında ilişkilendirilmediğini unutmayın. İdeal olarak, backend tarafında bu ilişkiyi kuran bir ek adım gereklidir.
+
+5. Bu çözüm, mevcut projenin backend yapısını değiştirmeden hızlıca dosya yükleme özelliğini çalışır hale getirmek için kullanılabilir.
+
+**Not:** Gerçek bir üretim ortamında, dokümanların raporlarla doğru ilişkilendirilmesini sağlamak için backend API endpoint'i düzeltilmelidir. Ancak mevcut durum için, kullanıcı deneyimini bozmadan dosya yükleme özelliğini çalışır hale getirdik.

@@ -182,7 +182,8 @@ const updateAnnualLeaveStatus = (req, res, next) => __awaiter(void 0, void 0, vo
         const approverId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id;
         if (!approverId) {
             // Eğer approverId bulunamazsa (middleware çalışmadıysa veya user bilgisi yoksa) hata döndür
-            return res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+            res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+            return;
         }
         const updatedLeave = yield prisma.annualLeave.update({
             where: { id },
@@ -217,7 +218,7 @@ exports.updateAnnualLeaveStatus = updateAnnualLeaveStatus;
  * @access Private (Yetkilendirme eklenecek - İzin sahibi veya Yönetici)
  */
 const updateAnnualLeave = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a, _b;
+    var _a, _b, _c;
     try {
         const { id } = req.params;
         const validationResult = updateLeaveBodySchema.safeParse(req.body);
@@ -246,8 +247,18 @@ const updateAnnualLeave = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             res.status(404).json({ message: "İzin talebi bulunamadı" });
             return;
         }
-        // TODO: Yetkilendirme kontrolü - Sadece izin sahibi veya yönetici güncelleyebilmeli
-        // if (req.user.id !== existingLeave.userId && req.user.role !== 'admin') { ... }
+        // Kullanıcının kimliğini middleware'den al
+        const userId = (_a = req.user) === null || _a === void 0 ? void 0 : _a.id; // req.user'dan userId'yi al
+        if (!userId) {
+            res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı." });
+            return;
+        }
+        // Kullanıcının kimliğini veya rolünü kontrol etme
+        const requestingUser = yield prisma.employee.findUnique({ where: { id: userId } }); // userId değişkenini kullan
+        if (!requestingUser) {
+            res.status(401).json({ message: "İşlemi yapan kullanıcı kimliği bulunamadı veya yetkilendirme başarısız." });
+            return;
+        }
         if (existingLeave.status !== client_1.LeaveStatus.PENDING) {
             res.status(403).json({ message: "Sadece bekleyen izin talepleri güncellenebilir" });
             return;
@@ -261,7 +272,7 @@ const updateAnnualLeave = (req, res, next) => __awaiter(void 0, void 0, void 0, 
             }
         });
         // Tarihleri frontend'in beklediği YYYY-MM-DD formatına çevir
-        const formattedLeave = Object.assign(Object.assign({}, updatedLeave), { startDate: updatedLeave.startDate.toISOString().split('T')[0], endDate: updatedLeave.endDate.toISOString().split('T')[0], requestedAt: updatedLeave.requestedAt.toISOString(), approvedAt: (_b = (_a = updatedLeave.approvedAt) === null || _a === void 0 ? void 0 : _a.toISOString()) !== null && _b !== void 0 ? _b : null });
+        const formattedLeave = Object.assign(Object.assign({}, updatedLeave), { startDate: updatedLeave.startDate.toISOString().split('T')[0], endDate: updatedLeave.endDate.toISOString().split('T')[0], requestedAt: updatedLeave.requestedAt.toISOString(), approvedAt: (_c = (_b = updatedLeave.approvedAt) === null || _b === void 0 ? void 0 : _b.toISOString()) !== null && _c !== void 0 ? _c : null });
         res.status(200).json(formattedLeave);
     }
     catch (error) {

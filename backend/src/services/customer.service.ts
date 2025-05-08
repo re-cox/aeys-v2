@@ -9,33 +9,47 @@ type CustomerCreateData = Omit<Customer, 'id' | 'createdAt' | 'updatedAt'>;
 type CustomerUpdateData = Partial<CustomerCreateData>;
 
 /**
- * Tüm müşterileri getirir.
+ * Belirli bir kullanıcıya ait tüm müşterileri getirir.
+ * @param {string} userId Kullanıcı ID'si.
  * @returns {Promise<Customer[]>} Müşteri listesi.
  */
-export const getAllCustomers = async (): Promise<Customer[]> => {
-    return prisma.customer.findMany();
+export const getAllCustomers = async (userId: string): Promise<Customer[]> => {
+    if (!userId) {
+        throw new Error('Kullanıcı ID\'si gerekli.');
+    }
+    return prisma.customer.findMany({
+        where: { userId: userId },
+        orderBy: { createdAt: 'desc' }
+    });
 };
 
 /**
- * ID ile belirli bir müşteriyi getirir.
+ * ID ile belirli bir müşteriyi getirir ve kullanıcının yetkisini kontrol eder.
  * @param {string} id Müşteri ID'si.
+ * @param {string} userId Kullanıcı ID'si.
  * @returns {Promise<Customer>} Müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-export const getCustomerById = async (id: string): Promise<Customer> => {
+export const getCustomerById = async (id: string, userId: string): Promise<Customer> => {
+    if (!userId) {
+        throw new Error('Kullanıcı ID\'si gerekli.');
+    }
     const customer = await prisma.customer.findUnique({
-        where: { id },
+        where: { id: id },
     });
     if (!customer) {
-        // NotFoundError yerine standart Error
-        throw new Error('Müşteri bulunamadı'); 
+        throw new Error('Müşteri bulunamadı');
+    }
+    // Güvenlik: Müşterinin bu kullanıcıya ait olup olmadığını kontrol et
+    if (customer.userId !== userId) {
+        throw new Error('Bu müşteri bilgisine erişim yetkiniz yok.'); // Yetkisiz erişim hatası
     }
     return customer;
 };
 
 /**
  * Yeni bir müşteri oluşturur.
- * @param {CustomerCreateData} data Yeni müşteri verileri.
+ * @param {CustomerCreateData} data Yeni müşteri verileri (userId içermeli).
  * @returns {Promise<Customer>} Oluşturulan müşteri nesnesi.
  */
 export const createCustomer = async (data: CustomerCreateData): Promise<Customer> => {
@@ -62,12 +76,13 @@ export const createCustomer = async (data: CustomerCreateData): Promise<Customer
  * Mevcut bir müşteriyi günceller.
  * @param {string} id Güncellenecek müşteri ID'si.
  * @param {CustomerUpdateData} data Güncelleme verileri.
+ * @param {string} userId İşlemi yapan kullanıcı ID'si.
  * @returns {Promise<Customer>} Güncellenen müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-export const updateCustomer = async (id: string, data: CustomerUpdateData): Promise<Customer> => {
-    // Önce müşterinin var olup olmadığını kontrol et (getCustomerById Error fırlatır)
-    await getCustomerById(id);
+export const updateCustomer = async (id: string, data: CustomerUpdateData, userId: string): Promise<Customer> => {
+    // Önce müşterinin var olup olmadığını ve kullanıcıya ait olup olmadığını kontrol et
+    await getCustomerById(id, userId);
 
     // E-posta benzersizlik kontrolü kaldırıldı
     /*
@@ -93,14 +108,15 @@ export const updateCustomer = async (id: string, data: CustomerUpdateData): Prom
 /**
  * Bir müşteriyi siler.
  * @param {string} id Silinecek müşteri ID'si.
+ * @param {string} userId İşlemi yapan kullanıcı ID'si.
  * @returns {Promise<Customer>} Silinen müşteri nesnesi.
- * @throws {Error} Müşteri bulunamazsa.
+ * @throws {Error} Müşteri bulunamazsa veya kullanıcı yetkisizse.
  */
-export const deleteCustomer = async (id: string): Promise<Customer> => {
-    // Önce müşterinin var olup olmadığını kontrol et (getCustomerById Error fırlatır)
-    await getCustomerById(id);
+export const deleteCustomer = async (id: string, userId: string): Promise<Customer> => {
+    // Önce müşterinin var olup olmadığını ve kullanıcıya ait olup olmadığını kontrol et
+    await getCustomerById(id, userId);
 
     return prisma.customer.delete({
         where: { id },
     });
-}; 
+};

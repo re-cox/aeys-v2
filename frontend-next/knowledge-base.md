@@ -143,4 +143,50 @@
 5. `express-fileupload` modülü için tip tanımları eklenmiştir.
 6. `app.ts` dosyasına merkezi hata yönetimi eklenmiştir.
 
-Bu değişiklikler sayesinde documents sayfasındaki API çağrıları düzgün çalışmakta ve kullanıcı arayüzünde dokümanlar ve klasörler düzgün görüntülenmektedir. 
+Bu değişiklikler sayesinde documents sayfasındaki API çağrıları düzgün çalışmakta ve kullanıcı arayüzünde dokümanlar ve klasörler düzgün görüntülenmektedir.
+
+## Unknown field `notes` for select statement on model `Proposal`
+
+Çözüm:
+1. Bu hata, Proposal modelinde olmayan `notes` alanının API sorgularında kullanılmaya çalışılmasından kaynaklanmaktadır.
+2. Sorun, veritabanı şemasında bulunmayan bir alanın select, create veya update işlemlerinde kullanılmasıdır.
+3. Aşağıdaki adımlar izlenerek sorun çözülmüştür:
+   a. API rotalarında olmayan alan referansları kaldırılmıştır (örn. `notes` alanı)
+   b. Eksik alanlar (örn. `title`) eklenmiştir
+   c. İlgili tip tanımları güncellenmiştir
+   d. Prisma migrasyonu çalıştırılmıştır
+
+## Proposal model şemasında title alanı eksikliği
+
+Çözüm:
+1. Bu sorun, Proposal modelinde title alanı olmadığı için tekliflerin listelenmesinde 500 hatası alınmasından kaynaklanmaktadır.
+2. Prisma şemasına title alanı ekleyip migrasyon çalıştırılarak çözülmüştür:
+   ```
+   npx prisma migrate dev --name add_title_field_to_proposal
+   ```
+
+## Backend API/Auth login 500 hatası
+
+Çözüm:
+1. Bu hata, frontend-next ve backend arasındaki veritabanı uyuşmazlığından kaynaklanmaktadır.
+2. Uygulamada iki ayrı veritabanı bulunmaktadır: Next.js tarafında Prisma ile yönetilen ve backend tarafında ayrı bir veritabanı.
+3. Prisma migrate reset işlemi sadece frontend veritabanını sıfırlar, ancak API isteklerinin 5001 portunda çalışan backend'e gönderilmesi nedeniyle backend veritabanı da güncellenmelidir.
+4. Aşağıdaki adımlar izlenerek sorun çözülmüştür:
+   a. Backend klasörüne geçiş yapılması: `cd ../backend`
+   b. Backend veritabanının da sıfırlanması: `npx prisma migrate reset`
+   c. Backend uygulamasının başlatılması: `npm run start:dev`
+
+Bu sayede hem frontend hem de backend veritabanı senkronize edilmiş ve kullanıcı giriş işlemi çalışır hale gelmiştir. 
+
+## Cannot read properties of undefined (reading 'LOW') hatası (Tasks sayfası)
+
+Çözüm:
+1. Bu hata, backend tarafında TaskPriority enum'ının eksik olmasından kaynaklanan bir sorundur.
+2. Backend'de Task modeli ve ilgili API rotaları eksikti.
+3. Aşağıdaki adımlar izlenerek sorun çözülmüştür:
+   a. Backend için Task modeli enum'ları doğru şekilde tanımlandı (TaskPriority yerine Priority kullanıldı)
+   b. Backend'e görevlerle ilgili API rotaları eklendi (`src/routes/task.routes.ts` dosyası oluşturuldu)
+   c. Backend'in index.ts dosyasına task rotaları eklendi
+   d. Frontend tarafındaki TaskPriority referansları Priority ile değiştirildi
+
+Bu değişiklikler sonucunda görevlerin listesi ve detayları backend'den düzgün bir şekilde çekilebilir hale gelmiştir. 

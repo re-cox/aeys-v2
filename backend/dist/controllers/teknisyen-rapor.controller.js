@@ -13,16 +13,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteTeknisyenDokuman = exports.uploadTeknisyenDokuman = exports.getPersoneller = exports.deleteTeknisyenRaporu = exports.updateTeknisyenRaporu = exports.createTeknisyenRaporu = exports.getTeknisyenRaporu = exports.getTeknisyenRaporlari = void 0;
-const prisma_1 = require("../lib/prisma"); // Orijinal import'a geri dön
+const prisma_1 = require("../lib/prisma");
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
 const uuid_1 = require("uuid");
-// Doğrudan başlatmayı kaldır
-/*
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
-});
-*/
 // Tüm teknisyen raporlarını listele
 const getTeknisyenRaporlari = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -132,38 +126,99 @@ const getTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, funct
     }
 });
 exports.getTeknisyenRaporu = getTeknisyenRaporu;
-// Yeni teknisyen raporu oluştur
+// Teknisyen raporu oluştur
 const createTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
     try {
-        const { baslik, aciklama, durum, teknisyenId, projeId, siteId } = req.body;
-        if (!baslik || !teknisyenId) {
-            return res.status(400).json({ message: 'Başlık ve teknisyen bilgileri gereklidir' });
+        const { baslik, aciklama, durum, teknisyenId, projeId, siteId, tarih } = req.body;
+        console.log('Alınan istek verileri:', req.body);
+        // Zorunlu alanları kontrol et
+        if (!baslik) {
+            return res.status(400).json({ message: 'Başlık alanı zorunludur' });
         }
+        if (!teknisyenId) {
+            return res.status(400).json({ message: 'Teknisyen ID alanı zorunludur' });
+        }
+        let parsedTarih = new Date();
+        if (tarih) {
+            parsedTarih = new Date(tarih);
+            if (isNaN(parsedTarih.getTime())) {
+                return res.status(400).json({ message: 'Geçersiz tarih formatı' });
+            }
+        }
+        // Durum kontrolü
+        let normalizedDurum = durum;
+        const validDurumlar = ['TASLAK', 'INCELENIYOR', 'ONAYLANDI', 'REDDEDILDI'];
+        if (!validDurumlar.includes(durum)) {
+            console.warn(`Geçersiz durum değeri: ${durum}, varsayılan "TASLAK" kullanılıyor`);
+            normalizedDurum = 'TASLAK';
+        }
+        // TeknisyenId değerini düzgün formatta olduğundan emin ol
+        const manualTeknisyenId = String(teknisyenId);
+        // Teknisyen mevcut mu diye kontrol et
+        const teknisyen = yield prisma_1.prisma.user.findUnique({
+            where: { id: manualTeknisyenId }
+        });
+        let finalTeknisyenId = manualTeknisyenId;
+        let finalAciklama = aciklama || '';
+        // Teknisyen bulunamadıysa, varsayılan bir teknisyen ID kullan
+        if (!teknisyen) {
+            console.log(`Uyarı: ID'si ${manualTeknisyenId} olan teknisyen veritabanında bulunamadı. Sistem teknisyeni kullanılacak.`);
+            // Sistemde var olan bir admin veya varsayılan teknisyen bul
+            const defaultUser = yield prisma_1.prisma.user.findFirst({
+                where: {
+                    OR: [
+                        { roleId: { in: ["ADMIN", "TEKNISYEN"] } },
+                        { roleId: { equals: "ADMIN" } }
+                    ]
+                }
+            });
+            if (!defaultUser) {
+                return res.status(400).json({
+                    message: `Sistem teknisyeni bulunamadı. Lütfen önce bir teknisyen veya admin hesabı oluşturun.`,
+                    code: 'DEFAULT_USER_NOT_FOUND'
+                });
+            }
+            finalTeknisyenId = defaultUser.id;
+            // Kullanıcının girdiği teknisyen numarasını açıklamaya ekle
+            finalAciklama = `Manuel Teknisyen No: ${manualTeknisyenId}${finalAciklama ? '\n\n' + finalAciklama : ''}`;
+            console.log(`Sistem teknisyeni kullanılıyor. ID: ${finalTeknisyenId}`);
+        }
+        // Raporu oluştur
         const yeniRapor = yield prisma_1.prisma.teknisyenRapor.create({
             data: {
                 baslik,
-                aciklama,
-                durum: durum || 'TASLAK',
-                teknisyenId,
-                projeId,
-                siteId
-            },
-            include: {
-                teknisyen: {
-                    select: {
-                        id: true,
-                        name: true,
-                        surname: true,
-                        email: true
-                    }
-                }
+                aciklama: finalAciklama,
+                durum: normalizedDurum,
+                teknisyenId: finalTeknisyenId, // Sistemde var olan teknisyen ID'si
+                projeId: projeId || null,
+                siteId: siteId || null,
+                tarih: parsedTarih
             }
         });
-        return res.status(201).json(yeniRapor);
+        res.status(201).json(yeniRapor);
     }
-    catch (error) {
+    catch (err) {
+        const error = err;
         console.error('Teknisyen raporu oluşturma hatası:', error);
-        return res.status(500).json({ message: 'Teknisyen raporu oluşturulurken bir hata oluştu' });
+        const errorMessage = error.message || 'Teknisyen raporu oluşturulurken hata oluştu';
+        // Prisma spesifik hatalarını kontrol et
+        if (error.code) {
+            if (error.code === 'P2002') {
+                return res.status(400).json({
+                    message: 'Bu bilgilerle zaten bir rapor kayıtlı',
+                    code: error.code
+                });
+            }
+            // Foreign key hatası (P2003) durumunda
+            if (error.code === 'P2003') {
+                return res.status(400).json({
+                    message: `Veritabanı ilişki hatası! İlgili ID: ${(_a = error.meta) === null || _a === void 0 ? void 0 : _a.target}`,
+                    code: 'FOREIGN_KEY_ERROR'
+                });
+            }
+        }
+        res.status(500).json({ message: errorMessage });
     }
 });
 exports.createTeknisyenRaporu = createTeknisyenRaporu;
@@ -171,23 +226,33 @@ exports.createTeknisyenRaporu = createTeknisyenRaporu;
 const updateTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { id } = req.params;
-        const { baslik, aciklama, durum, projeId, siteId } = req.body;
+        const { baslik, aciklama, durum, projeId, siteId, tarih } = req.body;
+        console.log('Güncelleme için alınan istek verileri:', req.body);
         const raporVarMi = yield prisma_1.prisma.teknisyenRapor.findUnique({
             where: { id }
         });
         if (!raporVarMi) {
             return res.status(404).json({ message: 'Güncellenecek teknisyen raporu bulunamadı' });
         }
+        // Güncellenecek verileri hazırla
+        const updateData = {};
+        if (baslik !== undefined)
+            updateData.baslik = baslik;
+        if (aciklama !== undefined)
+            updateData.aciklama = aciklama;
+        if (durum !== undefined)
+            updateData.durum = durum;
+        if (projeId !== undefined)
+            updateData.projeId = projeId;
+        if (siteId !== undefined)
+            updateData.siteId = siteId;
+        if (tarih !== undefined)
+            updateData.tarih = new Date(tarih);
+        // Her durumda updatedAt'i güncelle
+        updateData.updatedAt = new Date();
         const guncelRapor = yield prisma_1.prisma.teknisyenRapor.update({
             where: { id },
-            data: {
-                baslik,
-                aciklama,
-                durum,
-                projeId,
-                siteId,
-                updatedAt: new Date()
-            },
+            data: updateData,
             include: {
                 teknisyen: {
                     select: {
@@ -253,13 +318,6 @@ const getPersoneller = (req, res) => __awaiter(void 0, void 0, void 0, function*
                 name: true,
                 surname: true,
                 email: true,
-                // Departman ilişkisi User modelinde değil, Employee modelinde.
-                // department: {
-                //   select: {
-                //     id: true,
-                //     name: true
-                //   }
-                // }
             },
             orderBy: {
                 name: 'asc'

@@ -23,16 +23,17 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email }
+          where: { email: credentials.email },
+          include: { role: true }
         });
 
-        if (!user || !user.hashedPassword) {
+        if (!user || !user.passwordHash) {
           // Kullanıcı bulunamadı veya şifresi hashlenmemiş
           console.error(`Yetkilendirme hatası: Kullanıcı bulunamadı veya şifre hashlenmemiş - ${credentials.email}`);
           return null;
         }
 
-        const isValidPassword = await bcrypt.compare(credentials.password, user.hashedPassword);
+        const isValidPassword = await bcrypt.compare(credentials.password, user.passwordHash);
 
         if (!isValidPassword) {
           console.error(`Yetkilendirme hatası: Geçersiz şifre - ${credentials.email}`);
@@ -45,7 +46,7 @@ export const authOptions: NextAuthOptions = {
           id: user.id,
           name: user.name,
           email: user.email,
-          role: user.role, // Kullanıcı rolünü ekleyin
+          roleId: user.roleId,
           // Gerekirse diğer kullanıcı bilgilerini ekleyin
         };
       }

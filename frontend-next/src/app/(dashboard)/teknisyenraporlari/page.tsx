@@ -43,6 +43,7 @@ const TeknisyenRaporlariPage = () => {
       setYukleniyor(true);
       setHata(null);
       const data = await getTeknisyenRaporlari();
+      console.log("Gelen rapor verileri:", data); // Debug için
       setRaporlar(data);
       setFiltrelenmisRaporlar(data);
     } catch (error) {
@@ -63,8 +64,10 @@ const TeknisyenRaporlariPage = () => {
     } else {
       const filtreliListe = raporlar.filter(
         (rapor) =>
-          rapor.isinAdi.toLowerCase().includes(aramaTermi.toLowerCase()) ||
-          rapor.teknisyenNo.toLowerCase().includes(aramaTermi.toLowerCase())
+          rapor.baslik?.toLowerCase().includes(aramaTermi.toLowerCase()) ||
+          rapor.teknisyenId?.toLowerCase().includes(aramaTermi.toLowerCase()) ||
+          rapor.teknisyen?.name?.toLowerCase().includes(aramaTermi.toLowerCase()) ||
+          rapor.teknisyen?.surname?.toLowerCase().includes(aramaTermi.toLowerCase())
       );
       setFiltrelenmisRaporlar(filtreliListe);
     }
@@ -96,9 +99,21 @@ const TeknisyenRaporlariPage = () => {
     }
   };
 
-  const formatTarih = (tarih: string) => {
+  const formatTarih = (tarih?: string | Date) => {
     if (!tarih) return "-";
-    return format(new Date(tarih), "dd MMM yyyy", { locale: tr });
+    try {
+      return format(new Date(tarih), "dd MMM yyyy", { locale: tr });
+    } catch (error) {
+      console.error("Tarih biçimlendirme hatası:", error, tarih);
+      return "-";
+    }
+  };
+
+  const getTeknisyenAdi = (rapor: TeknisyenRaporu) => {
+    if (rapor.teknisyen?.name) {
+      return `${rapor.teknisyen.name} ${rapor.teknisyen.surname || ''}`;
+    }
+    return rapor.teknisyenId || "-";
   };
 
   return (
@@ -139,7 +154,7 @@ const TeknisyenRaporlariPage = () => {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Teknisyen No</TableHead>
+                    <TableHead>Teknisyen / ID</TableHead>
                     <TableHead>İşin Adı</TableHead>
                     <TableHead>Durum</TableHead>
                     <TableHead>Başlangıç Tarihi</TableHead>
@@ -150,14 +165,14 @@ const TeknisyenRaporlariPage = () => {
                 <TableBody>
                   {filtrelenmisRaporlar.map((rapor) => (
                     <TableRow key={rapor.id}>
-                      <TableCell>{rapor.teknisyenNo}</TableCell>
-                      <TableCell>{rapor.isinAdi}</TableCell>
+                      <TableCell>{getTeknisyenAdi(rapor)}</TableCell>
+                      <TableCell>{rapor.baslik || rapor.isinAdi}</TableCell>
                       <TableCell>
                         <Badge className={getDurumBadgeRengi(rapor.durum)}>
                           {rapor.durum}
                         </Badge>
                       </TableCell>
-                      <TableCell>{formatTarih(rapor.baslangicTarihi)}</TableCell>
+                      <TableCell>{formatTarih(rapor.tarih || rapor.baslangicTarihi)}</TableCell>
                       <TableCell>{formatTarih(rapor.bitisTarihi)}</TableCell>
                       <TableCell>
                         <div className="flex space-x-2">

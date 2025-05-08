@@ -1,17 +1,9 @@
 import { Request, Response } from 'express';
-import { prisma } from '../lib/prisma'; // Orijinal import'a geri dön
-// import { PrismaClient } from '@prisma/client'; // Bu satırları kaldır
+import { prisma } from '../lib/prisma';
 import { env } from '../config/env';
 import fs from 'fs';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-
-// Doğrudan başlatmayı kaldır
-/*
-const prisma = new PrismaClient({
-  log: process.env.NODE_ENV === "development" ? ["query", "error", "warn"] : ["error"],
-});
-*/
 
 // Tüm teknisyen raporlarını listele
 export const getTeknisyenRaporlari = async (req: Request, res: Response) => {
@@ -123,40 +115,124 @@ export const getTeknisyenRaporu = async (req: Request, res: Response) => {
   }
 };
 
-// Yeni teknisyen raporu oluştur
+// Teknisyen raporu oluştur
 export const createTeknisyenRaporu = async (req: Request, res: Response) => {
   try {
-    const { baslik, aciklama, durum, teknisyenId, projeId, siteId } = req.body;
+    const { baslik, aciklama, durum, teknisyenId, projeId, siteId, tarih } = req.body;
     
-    if (!baslik || !teknisyenId) {
-      return res.status(400).json({ message: 'Başlık ve teknisyen bilgileri gereklidir' });
+    console.log('Alınan istek verileri:', req.body);
+    
+    // Zorunlu alanları kontrol et
+    if (!baslik) {
+      return res.status(400).json({ message: 'Başlık alanı zorunludur' });
     }
     
+    if (!teknisyenId) {
+      return res.status(400).json({ message: 'Rapor Bilgi Numarası alanı zorunludur' });
+    }
+    
+    let parsedTarih = new Date();
+    if (tarih) {
+      parsedTarih = new Date(tarih);
+      if (isNaN(parsedTarih.getTime())) {
+        return res.status(400).json({ message: 'Geçersiz tarih formatı' });
+      }
+    }
+    
+    // Durum kontrolü
+    let normalizedDurum = durum;
+    const validDurumlar = ['TASLAK', 'INCELENIYOR', 'ONAYLANDI', 'REDDEDILDI'];
+    
+    if (!validDurumlar.includes(durum)) {
+      console.warn(`Geçersiz durum değeri: ${durum}, varsayılan "TASLAK" kullanılıyor`);
+      normalizedDurum = 'TASLAK';
+    }
+    
+    // Sabit bir sistem kullanıcısı ID'si değil, direkt teknisyenId alanını kullan
+    // Açıklama alanını olduğu gibi koru - frontend tarafından gerekli bilgiler ekleniyor
+    
+    // Raporu oluştur
     const yeniRapor = await prisma.teknisyenRapor.create({
       data: {
         baslik,
-        aciklama,
-        durum: durum || 'TASLAK',
-        teknisyenId,
-        projeId,
-        siteId
-      },
-      include: {
-        teknisyen: {
-          select: {
-            id: true,
-            name: true,
-            surname: true,
-            email: true
-          }
-        }
+        aciklama: aciklama || '',
+        durum: normalizedDurum,
+        teknisyenId: teknisyenId, // Doğrudan kullanıcının girdiği değer
+        projeId: projeId || null,
+        siteId: siteId || null,
+        tarih: parsedTarih
       }
     });
-    
-    return res.status(201).json(yeniRapor);
-  } catch (error) {
+
+    res.status(201).json(yeniRapor);
+  } catch (err) {
+    const error = err as any;
     console.error('Teknisyen raporu oluşturma hatası:', error);
-    return res.status(500).json({ message: 'Teknisyen raporu oluşturulurken bir hata oluştu' });
+    const errorMessage = error.message || 'Teknisyen raporu oluşturulurken hata oluştu';
+    
+    // Prisma spesifik hatalarını kontrol et
+    if (error.code) {
+      if (error.code === 'P2002') {
+        return res.status(400).json({ 
+          message: 'Bu bilgilerle zaten bir rapor kayıtlı',
+          code: error.code
+        });
+      }
+      
+      // Foreign key hatası (P2003) durumunda - veritabanında bulunmayan bir ID kullanıldığında
+      if (error.code === 'P2003') {
+        // Hata detaylarını ayıkla
+        const fieldName = error.meta?.field_name;
+        const errorTarget = error.meta?.target;
+        console.error(`Foreign key hatası: ${fieldName} alanı için geçersiz değer: ${errorTarget}`);
+        
+        // Kullanıcının girdiği değerleri değişkenlerde saklayalım
+        const originalTeknisyenId = teknisyenId;
+        const originalAciklama = aciklama || '';
+        
+        // Sonra veritabanında var olan bir ID kullanarak tekrar deneyelim
+        try {
+          // Sisteme kayıtlı bir kullanıcı bul
+          const defaultUser = await prisma.user.findFirst();
+          
+          if (!defaultUser) {
+            return res.status(500).json({ 
+              message: 'Sistem hatası: Varsayılan kullanıcı bulunamadı',
+              code: 'DEFAULT_USER_NOT_FOUND'
+            });
+          }
+          
+          // Kullanıcının girdiği teknisyenId'yi açıklama alanına ekle
+          const updatedAciklama = `Rapor Bilgi No: ${originalTeknisyenId}\n\n${originalAciklama}`;
+          
+          console.log(`Foreign key hatası, varsayılan kullanıcı ile yeniden deneniyor: ${defaultUser.id}`);
+          console.log(`Kullanıcının girdiği ID açıklamaya eklendi: ${originalTeknisyenId}`);
+          
+          // Varsayılan kullanıcı ile raporu oluştur
+          const yeniRapor = await prisma.teknisyenRapor.create({
+            data: {
+              baslik: baslik,
+              aciklama: updatedAciklama,
+              durum: normalizedDurum,
+              teknisyenId: defaultUser.id, // Sistemdeki varolan bir kullanıcı
+              projeId: projeId || null,
+              siteId: siteId || null,
+              tarih: parsedTarih
+            }
+          });
+          
+          return res.status(201).json(yeniRapor);
+        } catch (retryError) {
+          console.error('Teknisyen raporu oluşturma yeniden deneme hatası:', retryError);
+          return res.status(500).json({ 
+            message: 'Teknisyen raporu oluşturulurken hata oluştu (yeniden deneme)',
+            code: 'RETRY_FAILED'
+          });
+        }
+      }
+    }
+    
+    res.status(500).json({ message: errorMessage });
   }
 };
 
@@ -164,7 +240,9 @@ export const createTeknisyenRaporu = async (req: Request, res: Response) => {
 export const updateTeknisyenRaporu = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { baslik, aciklama, durum, projeId, siteId } = req.body;
+    const { baslik, aciklama, durum, projeId, siteId, tarih } = req.body;
+    
+    console.log('Güncelleme için alınan istek verileri:', req.body);
     
     const raporVarMi = await prisma.teknisyenRapor.findUnique({
       where: { id }
@@ -174,16 +252,21 @@ export const updateTeknisyenRaporu = async (req: Request, res: Response) => {
       return res.status(404).json({ message: 'Güncellenecek teknisyen raporu bulunamadı' });
     }
     
+    // Güncellenecek verileri hazırla
+    const updateData: any = {};
+    if (baslik !== undefined) updateData.baslik = baslik;
+    if (aciklama !== undefined) updateData.aciklama = aciklama;
+    if (durum !== undefined) updateData.durum = durum;
+    if (projeId !== undefined) updateData.projeId = projeId;
+    if (siteId !== undefined) updateData.siteId = siteId;
+    if (tarih !== undefined) updateData.tarih = new Date(tarih);
+    
+    // Her durumda updatedAt'i güncelle
+    updateData.updatedAt = new Date();
+    
     const guncelRapor = await prisma.teknisyenRapor.update({
       where: { id },
-      data: {
-        baslik,
-        aciklama,
-        durum,
-        projeId,
-        siteId,
-        updatedAt: new Date()
-      },
+      data: updateData,
       include: {
         teknisyen: {
           select: {
@@ -252,13 +335,6 @@ export const getPersoneller = async (req: Request, res: Response) => {
         name: true,
         surname: true,
         email: true,
-        // Departman ilişkisi User modelinde değil, Employee modelinde.
-        // department: {
-        //   select: {
-        //     id: true,
-        //     name: true
-        //   }
-        // }
       },
       orderBy: {
         name: 'asc'

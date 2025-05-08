@@ -91,20 +91,19 @@ model Customer {
 
 model Document {
   id           String    @id @default(cuid())
-  title        String
-  description  String?
-  fileUrl      String
-  fileType     String
-  fileSize     Int
-  version      Int       @default(1)
-  projectId    String?
-  customerId   String?
-  uploadedById String
+  name         String    // Renamed from title
+  description  String?   
+  fileUrl      String    
+  mimeType     String    // Renamed from fileType, based on DB image
+  size         Int       // Renamed from fileSize, based on DB image
+  projectId    String?   
+  customerId   String?   
+  createdById  String    // Renamed from uploadedById
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   Customer     Customer? @relation(fields: [customerId], references: [id])
   Project      Project?  @relation(fields: [projectId], references: [id])
-  uploadedBy   User      @relation("UploadedByRelation", fields: [uploadedById], references: [id])
+  uploadedBy   User      @relation("UploadedByRelation", fields: [createdById], references: [id]) 
 }
 
 model Assignment {
@@ -140,6 +139,8 @@ model Project {
   Site           Site?            @relation(fields: [siteId], references: [id])
   tasks          Task[]
   TeknisyenRapor TeknisyenRapor[]
+  ProgressPayment ProgressPayment[]
+  proposals      Proposal[]
 }
 
 model TeknisyenDokuman {
@@ -240,6 +241,7 @@ model User {
   Role                                       Role               @relation(fields: [roleId], references: [id])
   Task_TaskAssignee                          Task[]             @relation("TaskAssignee")
   Employee                                   Employee?
+  createdProposals                           Proposal[]         @relation("ProposalCreator")
 }
 
 model Employee {
@@ -354,6 +356,9 @@ model Proposal {
   items       ProposalItem[]
   attachments ProposalAttachment[]
   customer    Customer       @relation(fields: [customerId], references: [id])
+  createdBy   User           @relation("ProposalCreator", fields: [createdById], references: [id])
+  project     Project?       @relation(fields: [projectId], references: [id])
+  projectId   String?
 }
 
 model ProposalItem {

@@ -22,16 +22,24 @@ const prisma_1 = require("./lib/prisma");
 // Tüm route modüllerini import et
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
+const role_routes_1 = __importDefault(require("./routes/role.routes"));
 const department_routes_1 = __importDefault(require("./routes/department.routes"));
 const employee_routes_1 = __importDefault(require("./routes/employee.routes"));
-const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"));
+const task_routes_1 = __importDefault(require("./routes/task.routes"));
+const project_routes_1 = __importDefault(require("./routes/project.routes"));
+const customers_routes_1 = __importDefault(require("./routes/customers.routes"));
+const proposal_routes_1 = __importDefault(require("./routes/proposal.routes"));
+const upload_routes_1 = __importDefault(require("./routes/upload.routes"));
 const folder_routes_1 = __importDefault(require("./routes/folder.routes"));
 const document_routes_1 = __importDefault(require("./routes/document.routes"));
-const upload_routes_1 = __importDefault(require("./routes/upload.routes"));
 const edas_routes_1 = __importDefault(require("./routes/edas.routes"));
-const additional_work_routes_1 = __importDefault(require("./routes/additional-work.routes"));
-const proposal_routes_1 = __importDefault(require("./routes/proposal.routes"));
 const purchasing_routes_1 = __importDefault(require("./routes/purchasing.routes"));
+const marketing_activities_routes_1 = __importDefault(require("./routes/marketing-activities.routes"));
+const additional_work_routes_1 = __importDefault(require("./routes/additional-work.routes"));
+const progressPayment_routes_1 = __importDefault(require("./routes/progressPayment.routes"));
+const annualLeave_routes_1 = __importDefault(require("./routes/annualLeave.routes"));
+const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"));
+const teknisyen_rapor_routes_1 = __importDefault(require("./routes/teknisyen-rapor.routes"));
 // Express uygulamasını oluştur
 const app = (0, express_1.default)();
 // Middleware'leri ayarla
@@ -48,16 +56,24 @@ console.log(`[Server] Static files served from: ${path_1.default.join(__dirname,
 // API Routes - tüm rotaları ekle
 app.use('/api/auth', auth_routes_1.default);
 app.use('/api/users', user_routes_1.default);
+app.use('/api/roles', role_routes_1.default);
 app.use('/api/folders', folder_routes_1.default);
 app.use('/api/documents', document_routes_1.default);
 app.use('/api/upload', upload_routes_1.default);
 app.use('/api/employees', employee_routes_1.default);
 app.use('/api/departments', department_routes_1.default);
 app.use('/api/edas', edas_routes_1.default);
-app.use('/api/attendances', attendance_routes_1.default);
-app.use('/api/additional-works', additional_work_routes_1.default);
+app.use('/api/tasks', task_routes_1.default);
+app.use('/api/projects', project_routes_1.default);
+app.use('/api/customers', customers_routes_1.default);
 app.use('/api/proposals', proposal_routes_1.default);
 app.use('/api/purchasing', purchasing_routes_1.default);
+app.use('/api/marketing', marketing_activities_routes_1.default);
+app.use('/api/additional-work', additional_work_routes_1.default);
+app.use('/api/progress-payments', progressPayment_routes_1.default);
+app.use('/api/annual-leaves', annualLeave_routes_1.default);
+app.use('/api/attendances', attendance_routes_1.default);
+app.use('/api/test-raporlar', teknisyen_rapor_routes_1.default);
 // Sağlık kontrolü
 app.get('/api/health', (req, res) => {
     res.status(200).json({ status: 'ok', environment: env_1.env.NODE_ENV });

@@ -5,14 +5,14 @@ import { ProposalStatus, Currency, ProposalItemType } from '@/types/proposal';
 import { Proposal } from '@/types/proposal';
 
 // Özel tipler
-type ProposalWhereInput = {
-    OR?: any[];
-    customerId?: string;
-    status?: string;
-    proposalNo?: {
-        startsWith?: string;
-    };
-};
+// type ProposalWhereInput = {
+//     OR?: any[];
+//     customerId?: string;
+//     status?: string;
+//     proposalNo?: {
+//         startsWith?: string;
+//     };
+// };
 
 // Yardımcı fonksiyon: Teklif toplamlarını hesapla
 function calculateTotals(items: any[]) {
@@ -44,14 +44,15 @@ export async function GET(req: NextRequest) {
 
         const skip = (page - 1) * limit;
 
-        let whereClause: ProposalWhereInput = {};
+        // let whereClause: ProposalWhereInput = {};
+        let whereClause: Prisma.ProposalWhereInput = {};
 
-        // Arama filtresi (başlık, açıklama, teklif no, müşteri adı)
+        // Arama filtresi (açıklama, teklif no, müşteri adı)
         if (search) {
             whereClause.OR = [
-                { title: { contains: search, mode: 'insensitive' } },
                 { description: { contains: search, mode: 'insensitive' } },
                 { proposalNo: { contains: search, mode: 'insensitive' } },
+                { title: { contains: search, mode: 'insensitive' } },
                 { customer: { name: { contains: search, mode: 'insensitive' } } }
             ];
         }
@@ -63,16 +64,38 @@ export async function GET(req: NextRequest) {
 
         // Durum filtresi
         if (status && Object.values(ProposalStatus).includes(status)) {
-            whereClause.status = status;
+            whereClause.status = { equals: status };
         }
 
         // Teklifleri ve toplam sayıyı al
         const [proposals, totalCount] = await prisma.$transaction([
             prisma.proposal.findMany({
                 where: whereClause,
-                include: {
+                select: {
+                    id: true,
+                    proposalNo: true,
+                    title: true,
+                    description: true,
+                    status: true,
+                    customerId: true,
+                    createdById: true, 
+                    validUntil: true,
+                    createdAt: true,
+                    updatedAt: true,
                     customer: { select: { id: true, name: true } },
-                    items: true,
+                    items: { 
+                        select: {
+                            id: true,
+                            description: true,
+                            quantity: true,
+                            unitPrice: true,
+                            currency: true,
+                            type: true,
+                            unit: true,
+                            createdAt: true,
+                            updatedAt: true,
+                        }
+                    },
                     attachments: { select: { id: true, fileName: true } }
                 },
                 orderBy: { createdAt: 'desc' },
@@ -83,14 +106,17 @@ export async function GET(req: NextRequest) {
         ]);
 
         // Gelen 'proposals' içindeki her bir elemanın tipini belirle
-        type ProposalWithItems = Omit<Proposal, 'items' | 'customer'> & { 
-            customer: { id: string; name: string | null };
-            items: any[]
-        };
+        // Prisma generate sonrası tipler daha doğru olmalı, any yerine daha spesifik tip deneyebiliriz.
+        // Ancak select kullanıldığı için Prisma'nın döndürdüğü tip tam Proposal olmayabilir.
+        // Şimdilik any kalsın, gerekirse manuel tip oluşturulur.
+        // type ProposalWithItems = Omit<Proposal, 'items' | 'customer'> & { 
+        //     customer: { id: string; name: string | null } | null;
+        //     items: any[] 
+        //     attachments: {id: string, fileName: string}[]
+        // };
 
-        const proposalsWithTotals = proposals.map((p: ProposalWithItems) => {
-            const { totals, totalQuantity } = calculateTotals(p.items);
-            // items anahtarını çıkartırken diğer veriyi koru
+        const proposalsWithTotals = proposals.map((p: any) => { 
+            const { totals, totalQuantity } = calculateTotals(p.items || []); 
             const { items, ...rest } = p;
             return { ...rest, totals, totalQuantity };
         });
@@ -115,8 +141,8 @@ export async function POST(req: NextRequest) {
     const { items, attachments, ...proposalData } = data;
 
     // Gerekli alan kontrolü
-    if (!proposalData.title || !proposalData.customerId) {
-      return NextResponse.json({ error: 'Teklif başlığı ve müşteri seçimi zorunludur' }, { status: 400 });
+    if (!proposalData.customerId || !proposalData.title) {
+      return NextResponse.json({ error: 'Müşteri seçimi ve teklif başlığı zorunludur' }, { status: 400 });
     }
     if (!Array.isArray(items) || items.length === 0) {
          return NextResponse.json({ error: 'Teklife en az bir kalem eklenmelidir' }, { status: 400 });

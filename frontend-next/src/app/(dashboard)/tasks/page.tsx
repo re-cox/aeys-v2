@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { Task, NewTaskData, UpdateTaskData } from "@/types/task";
 import { Employee } from "@/types/employee";
 import { Project } from "@/types/project"; // Project tipini import et
-import { TaskStatus, TaskPriority } from "@prisma/client"; // Enumları kullan
+import { TaskStatus, Priority } from "@prisma/client"; // TaskPriority yerine Priority kullandık
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,6 +65,7 @@ import {
   CommandItem, 
   CommandList 
 } from "@/components/ui/command"; // Çalışan seçimi için Combobox
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Tabs import edildi
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 // import { 
@@ -80,18 +81,18 @@ const statusConfig: Record<TaskStatus, { color: string; text: string; icon: Reac
   [TaskStatus.CANCELLED]: { color: 'border-red-500 text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-300', text: 'İptal', icon: Ban },
 };
 
-const priorityConfig: Record<TaskPriority, { color: string; text: string; icon: React.ElementType }> = {
-  [TaskPriority.LOW]: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', text: 'Düşük', icon: ChevronDown },
-  [TaskPriority.MEDIUM]: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200', text: 'Orta', icon: ChevronRight }, // İkon değiştirilebilir
-  [TaskPriority.HIGH]: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200', text: 'Yüksek', icon: ChevronRight }, // İkon değiştirilebilir
-  [TaskPriority.URGENT]: { color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200', text: 'Acil', icon: AlertCircle },
+const priorityConfig: Record<Priority, { color: string; text: string; icon: React.ElementType }> = {
+  [Priority.LOW]: { color: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300', text: 'Düşük', icon: ChevronDown },
+  [Priority.MEDIUM]: { color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200', text: 'Orta', icon: ChevronRight }, // İkon değiştirilebilir
+  [Priority.HIGH]: { color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200', text: 'Yüksek', icon: ChevronRight }, // İkon değiştirilebilir
+  [Priority.URGENT]: { color: 'bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200', text: 'Acil', icon: AlertCircle },
 };
 
 const initialFormData: NewTaskData = {
     title: "",
     description: "",
     status: TaskStatus.TODO,
-    priority: TaskPriority.MEDIUM,
+    priority: Priority.MEDIUM,
     dueDate: null,
     assigneeIds: [],
     projectId: null,
@@ -104,7 +105,7 @@ export default function TaskPage() {
   const [loading, setLoading] = useState(true);
   const [loadingError, setLoadingError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [filterStatus, setFilterStatus] = useState<TaskStatus | "">("");
+  const [activeTab, setActiveTab] = useState<string>("aktif"); // Varsayılan tab
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [editingTask, setEditingTask] = useState<Task | null>(null);
@@ -167,29 +168,21 @@ export default function TaskPage() {
     setFormData((prev) => ({ ...prev, [name]: value === "other" || value === "" ? null : value })); // Proje için null kontrolü
   };
 
-  // Durum Filtresi Değişikliğini İşle
-  const handleFilterStatusChange = (value: string) => {
-    setFilterStatus(value === "all" ? "" : value as TaskStatus);
-  };
-
   // Çalışan Combobox değişikliğini işle (Çoklu seçim)
   const handleEmployeeSelect = (employeeId: string) => {
     setSelectedAssigneeIds(prevSelectedIds => {
-      if (prevSelectedIds.includes(employeeId)) {
-        // Zaten seçiliyse kaldır
-        return prevSelectedIds.filter(id => id !== employeeId);
-      } else {
-        // Seçili değilse ekle
-        return [...prevSelectedIds, employeeId];
-      }
+      const newSelectedIds = prevSelectedIds.includes(employeeId)
+        ? prevSelectedIds.filter(id => id !== employeeId)
+        : [...prevSelectedIds, employeeId];
+
+      // formData'yı yeni selectedAssigneeIds ile güncelle
+      setFormData(prevFormData => ({
+        ...prevFormData,
+        assigneeIds: newSelectedIds // Doğrudan yeni oluşturulan `newSelectedIds` kullanılır.
+      }));
+
+      return newSelectedIds; // setSelectedAssigneeIds'nin yeni değerini döndürür
     });
-    // Form datasına da yansıt
-    setFormData(prev => ({
-        ...prev,
-        assigneeIds: selectedAssigneeIds.includes(employeeId) 
-                     ? selectedAssigneeIds.filter(id => id !== employeeId) 
-                     : [...selectedAssigneeIds, employeeId]
-    }));
   };
   
   // Çalışan Combobox için seçili isimleri gösteren yardımcı fonksiyon
@@ -215,6 +208,7 @@ export default function TaskPage() {
   // Formu Gönder (Ekleme/Güncelleme)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
     setIsSubmitting(true);
     try {
       let savedTask: Task;
@@ -341,8 +335,8 @@ export default function TaskPage() {
     }
   };
 
-  // Filtrelenmiş Görevler
-  const filteredTasks = useMemo(() => {
+  // Filtrelenmiş ve Sekmelere Göre Ayrılmış Görevler
+  const getTasksForTab = (tabKey: string) => {
     return tasks.filter(task => {
       const searchLower = search.toLowerCase();
       const matchesSearch = 
@@ -350,248 +344,25 @@ export default function TaskPage() {
         (task.description?.toLowerCase() || '').includes(searchLower) ||
         (task.assignees && task.assignees.length > 0 && task.assignees.some(a => `${a.name || ''} ${a.surname || ''}`.toLowerCase().includes(searchLower)));
       
-      const matchesStatus = filterStatus ? task.status === filterStatus : true;
+      if (!matchesSearch) return false;
 
-      return matchesSearch && matchesStatus;
+      switch (tabKey) {
+        case "aktif":
+          return task.status === TaskStatus.TODO || 
+                 task.status === TaskStatus.IN_PROGRESS || 
+                 task.status === TaskStatus.REVIEW;
+        case "tamamlandi":
+          return task.status === TaskStatus.COMPLETED;
+        case "iptal":
+          return task.status === TaskStatus.CANCELLED;
+        default:
+          return true;
+      }
     });
-  }, [tasks, search, filterStatus]);
-
-
-  // --- RENDER --- 
-  return (
-    <div className="container mx-auto px-4 py-6 space-y-6">
-      {/* Başlık ve Yeni Görev Butonu */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        {/* Başlık Bölümü */}
-        <div> 
-          <h1 className="text-2xl font-bold tracking-tight">Görev Yönetimi</h1>
-          <p className="text-muted-foreground">Proje görevlerini oluşturun, atayın ve takip edin.</p>
-        </div>
-        
-        {/* Yeni Görev Sheet */}
-        <Sheet open={isSheetOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsSheetOpen(open); }}>
-          <SheetTrigger asChild>
-            <Button onClick={resetForm}>
-              <Plus className="mr-2 h-4 w-4" /> Yeni Görev
-            </Button>
-          </SheetTrigger>
-          <SheetContent className="sm:max-w-[550px] overflow-y-auto">
-            <SheetHeader>
-              <SheetTitle>{editingTask ? "Görevi Düzenle" : "Yeni Görev Oluştur"}</SheetTitle>
-              <SheetDescription>
-                {editingTask ? "Görevin detaylarını güncelleyin." : "Yeni bir görev için gerekli bilgileri girin."}
-              </SheetDescription>
-            </SheetHeader>
-            <form onSubmit={handleSubmit} className="py-4 space-y-4">
-              {/* Form Alanları */}
-              <div className="space-y-1">
-                <Label htmlFor="title">Görev Başlığı*</Label>
-                <Input id="title" name="title" value={formData.title} onChange={handleInputChange} required placeholder="örn: Trafo bakımı" />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="description">Açıklama</Label>
-                <Textarea id="description" name="description" value={formData.description || ""} onChange={handleInputChange} placeholder="Görevin detayları..." />
-              </div>
-
-              {/* Project Selection */}
-              <div className="space-y-1">
-                <Label htmlFor="projectId">Proje</Label>
-                <Select 
-                  name="projectId"
-                  value={formData.projectId || "other"}
-                  onValueChange={handleSelectChange('projectId')}
-                  disabled={!Array.isArray(projects) || projects.length === 0} // Proje yoksa veya dizi değilse disable et
-                >
-                  <SelectTrigger id="projectId">
-                    <SelectValue placeholder="Proje seçin veya Diğer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="other">Diğer (Projesiz)</SelectItem>
-                    {/* Güvenlik kontrolü */}
-                    {Array.isArray(projects) && projects.map(project => (
-                      <SelectItem key={project.id} value={project.id}>
-                        {project.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="status">Durum</Label>
-                  <Select name="status" value={formData.status} onValueChange={handleSelectChange('status')}>
-                    <SelectTrigger id="status">
-                      <SelectValue placeholder="Durum seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(statusConfig).map(([key, { text, icon: Icon }]) => (
-                        <SelectItem key={key} value={key}>
-                          <div className="flex items-center">
-                            <Icon className="mr-2 h-4 w-4 opacity-70" /> {text}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="priority">Öncelik</Label>
-                  <Select name="priority" value={formData.priority} onValueChange={handleSelectChange('priority')}>
-                    <SelectTrigger id="priority">
-                      <SelectValue placeholder="Öncelik seçin" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {Object.entries(priorityConfig).map(([key, { text, icon: Icon }]) => (
-                        <SelectItem key={key} value={key}>
-                          <div className="flex items-center"> 
-                            <Icon className="mr-2 h-4 w-4 opacity-70" /> {text}
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <div className="space-y-1">
-                    <Label htmlFor="assigneeIds">Atanan Kişiler</Label> {/* ID değişti */} 
-                     <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={true} // Combobox açık/kapalı durumu yönetilmiyorsa true bırakılabilir
-                            className={cn(
-                              "w-full justify-between",
-                              selectedAssigneeIds.length === 0 && "text-muted-foreground"
-                            )}
-                          >
-                            {/* Seçili isimleri göster */}
-                            {getSelectedAssigneeNames()}
-                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
-                          <Command>
-                            <CommandInput 
-                              placeholder="Çalışan ara..." 
-                              value={employeeSearch}
-                              onValueChange={setEmployeeSearch}
-                            />
-                            <CommandList>
-                              <CommandEmpty>Çalışan bulunamadı.</CommandEmpty>
-                              <CommandGroup>
-                                {/* "Atanmamış" seçeneğini kaldırabiliriz, boş liste yeterli */}
-                                {/* 
-                                <CommandItem
-                                    key="unassigned"
-                                    value=""
-                                    onSelect={() => setSelectedAssigneeIds([])} // Tüm seçimi kaldırır
-                                >
-                                   <Check className={cn("mr-2 h-4 w-4", selectedAssigneeIds.length === 0 ? "opacity-100" : "opacity-0")} />
-                                   Atama Yok
-                                </CommandItem>
-                                */}
-                                {employees
-                                .filter(emp => `${emp.name || ''} ${emp.surname || ''}`.toLowerCase().includes(employeeSearch.toLowerCase()))
-                                .map((employee) => (
-                                  <CommandItem
-                                    key={employee.id}
-                                    value={`${employee.name} ${employee.surname || ''}`}
-                                    onSelect={() => handleEmployeeSelect(employee.id)}
-                                  >
-                                    <Check
-                                      className={cn(
-                                        "mr-2 h-4 w-4",
-                                        selectedAssigneeIds.includes(employee.id) ? "opacity-100" : "opacity-0"
-                                      )}
-                                    />
-                                    <span className="flex items-center">
-                                      {employee.profilePictureUrl ? (
-                                        <img src={employee.profilePictureUrl} alt={`${employee.name} ${employee.surname || ''}`} className="h-5 w-5 rounded-full mr-1.5 object-cover" />
-                                      ) : (
-                                        <div className="h-5 w-5 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300 mr-1.5">
-                                          {(employee.name?.charAt(0) || '').toUpperCase()}
-                                        </div>
-                                      )}
-                                      {employee.name} {employee.surname || ''}
-                                      <span className="ml-2 text-xs text-muted-foreground">({employee.position || 'Pozisyon Yok'})</span>
-                                    </span>
-                                  </CommandItem>
-                                ))}
-                              </CommandGroup>
-                             </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="dueDate">Bitiş Tarihi</Label>
-                  <Input 
-                    id="dueDate"
-                    type="date"
-                    value={getDueDateString(formData.dueDate)} // Helper fonksiyonu kullan
-                    onChange={handleInputChange} 
-                    name="dueDate"
-                  />
-                </div>
-              </div>
-              <SheetFooter>
-                <SheetClose asChild>
-                  <Button type="button" variant="outline">İptal</Button>
-                </SheetClose>
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  {editingTask ? "Güncelle" : "Oluştur"}
-                </Button>
-              </SheetFooter>
-            </form>
-          </SheetContent>
-        </Sheet>
-      </div> 
-      
-      {/* Filtreleme ve Arama */}
-      <div className="flex flex-col sm:flex-row gap-2 items-center">
-        <div className="relative w-full sm:w-auto flex-1">
-          <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Görevlerde veya atanan kişide ara..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-9 w-full"
-          />
-        </div>
-        <Select 
-          value={filterStatus || "all"} // Select değeri "all" veya TaskStatus olabilir
-          onValueChange={handleFilterStatusChange} // Yeni handler'ı kullan
-        >
-          <SelectTrigger className="w-full sm:w-[180px]">
-            <SelectValue placeholder="Duruma göre filtrele" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tüm Durumlar</SelectItem> 
-            {Object.entries(statusConfig).map(([key, { text, icon: Icon }]) => (
-              <SelectItem key={key} value={key}>
-                      <div className="flex items-center"> 
-                    <Icon className="mr-2 h-4 w-4 opacity-70" /> {text}
-                      </div>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      
-      {/* Hata Mesajı */}
-       {loadingError && (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle>Veri Yükleme Hatası</AlertTitle>
-          <AlertDescription>{loadingError}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Görev Listesi Tablosu */}
+  };
+  
+  // Render edilecek tablo için bir fonksiyon
+  const renderTaskTable = (tasksToRender: Task[]) => (
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
@@ -600,6 +371,7 @@ export default function TaskPage() {
               <TableHead>Atanan</TableHead>
               <TableHead>Durum</TableHead>
               <TableHead>Öncelik</TableHead>
+            <TableHead>Proje</TableHead>
               <TableHead>Bitiş Tarihi</TableHead>
               <TableHead>İşlemler</TableHead>
             </TableRow>
@@ -607,26 +379,23 @@ export default function TaskPage() {
           <TableBody>
             {loading && (
               <TableRow key="loading-row">
-                <TableCell colSpan={6} className="h-24 text-center">
+              <TableCell colSpan={7} className="h-24 text-center">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             )}
-            {!loading && !loadingError && filteredTasks.length === 0 && (
+          {!loading && !loadingError && tasksToRender.length === 0 && (
               <TableRow key="empty-row">
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  {search || filterStatus ? "Filtre kriterlerine uygun görev bulunamadı." : "Henüz görev oluşturulmamış."}
+              <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
+                {search ? "Arama kriterlerine uygun görev bulunamadı." : "Bu sekmede gösterilecek görev yok."}
                 </TableCell>
               </TableRow>
             )}
-            {!loading && !loadingError && filteredTasks.map((task) => {
-              // İkonları değişkene ata
-              const statusConfigItem = statusConfig[task.status] || statusConfig[TaskStatus.TODO]; // Fallback to TODO if status not found
-              const priorityConfigItem = priorityConfig[task.priority] || priorityConfig[TaskPriority.MEDIUM]; // Fallback to MEDIUM if priority not found
-              
-              const StatusIcon = statusConfigItem ? statusConfigItem.icon : Clock; // Fallback to Clock if icon is missing
-              const PriorityIcon = priorityConfigItem ? priorityConfigItem.icon : ChevronRight; // Fallback to ChevronRight if icon is missing
-              
+          {!loading && !loadingError && tasksToRender.map((task) => {
+            const statusConfigItem = statusConfig[task.status] || statusConfig[TaskStatus.TODO];
+            const priorityConfigItem = priorityConfig[task.priority] || priorityConfig[Priority.MEDIUM];
+            const StatusIcon = statusConfigItem?.icon || Clock;
+            const PriorityIcon = priorityConfigItem?.icon || ChevronRight;
               const project = projects.find(p => p.id === task.projectId);
 
               return (
@@ -634,26 +403,25 @@ export default function TaskPage() {
                   <TableCell className="font-medium max-w-xs truncate" title={task.title}>{task.title}</TableCell>
                   <TableCell className="text-sm text-gray-600 dark:text-gray-300">
                     {task.assignees && task.assignees.length > 0 ? (
-                      <div className="flex items-center -space-x-2 overflow-hidden">
-                        {task.assignees.slice(0, 3).map((assignee, index) => (
+                    <div className="flex flex-col items-start space-y-1">
+                      {task.assignees.map(assignee => (
                           <TooltipProvider key={assignee.id} delayDuration={100}>
                             <Tooltip>
                               <TooltipTrigger asChild>
+                              <div className="flex items-center space-x-1.5 cursor-default">
                                 {assignee.profilePictureUrl ? (
                                   <img
                                     src={assignee.profilePictureUrl}
                                     alt={`${assignee.name} ${assignee.surname || ''}`}
-                                    className="inline-block h-6 w-6 rounded-full ring-2 ring-white dark:ring-gray-800 object-cover"
-                                    style={{ zIndex: 3 - index }} // Üst üste binme sırası
+                                    className="h-5 w-5 rounded-full object-cover"
                                   />
                                 ) : (
-                                  <div 
-                                    className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-gray-300 dark:bg-gray-600 ring-2 ring-white dark:ring-gray-800 text-xs font-medium text-gray-600 dark:text-gray-300"
-                                    style={{ zIndex: 3 - index }}
-                                  >
-                                    {(assignee.name?.charAt(0) || '').toUpperCase()}
+                                  <div className="h-5 w-5 rounded-full bg-muted flex items-center justify-center text-xs font-medium text-muted-foreground">
+                                    {(assignee.name?.charAt(0) || '').toUpperCase()}{(assignee.surname?.charAt(0) || '').toUpperCase()}
                                   </div>
                                 )}
+                                <span>{assignee.name} {assignee.surname || ''}</span>
+                              </div>
                               </TooltipTrigger>
                               <TooltipContent>
                                 <p>{assignee.name} {assignee.surname || ''}</p>
@@ -662,11 +430,6 @@ export default function TaskPage() {
                             </Tooltip>
                           </TooltipProvider>
                         ))}
-                        {task.assignees.length > 3 && (
-                          <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gray-200 dark:bg-gray-700 ring-2 ring-white dark:ring-gray-800 text-xs font-medium text-gray-500 dark:text-gray-400" style={{ zIndex: 0 }}>
-                            +{task.assignees.length - 3}
-                          </div>
-                        )}
                       </div>
                     ) : (
                       <span className="text-gray-400 italic">Atanmamış</span>
@@ -701,7 +464,6 @@ export default function TaskPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center space-x-0.5"> 
-                      {/* Görüntüle Butonu */}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -715,12 +477,9 @@ export default function TaskPage() {
                                 </Button>
                             </Link>
                           </TooltipTrigger>
-                          <TooltipContent>
-                            <p>Detayları Görüntüle</p>
-                          </TooltipContent>
+                        <TooltipContent><p>Detayları Görüntüle</p></TooltipContent>
                         </Tooltip>
                       </TooltipProvider>
-                      {/* Düzenle Butonu */}
                       <TooltipProvider>
                          <Tooltip>
                             <TooltipTrigger asChild>
@@ -733,12 +492,9 @@ export default function TaskPage() {
                                  <Pencil className="h-4 w-4" /> 
                                </Button>
                            </TooltipTrigger>
-                           <TooltipContent>
-                             <p>Düzenle</p>
-                           </TooltipContent>
+                         <TooltipContent><p>Düzenle</p></TooltipContent>
                          </Tooltip>
                        </TooltipProvider>
-                      {/* Sil Butonu */}
                       <TooltipProvider>
                         <Tooltip>
                           <TooltipTrigger asChild>
@@ -752,9 +508,7 @@ export default function TaskPage() {
                                <Trash2 className="h-4 w-4" />
                              </Button>
                          </TooltipTrigger>
-                         <TooltipContent>
-                           <p>Sil</p>
-                         </TooltipContent>
+                       <TooltipContent><p>Sil</p></TooltipContent>
                        </Tooltip>
                      </TooltipProvider>
                     </div>
@@ -765,6 +519,191 @@ export default function TaskPage() {
           </TableBody>
         </Table>
       </div>
+  );
+
+  // --- RENDER --- 
+  return (
+    <div className="container mx-auto px-4 py-6 space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        {/* Başlık Bölümü */}
+        <div> 
+          <h1 className="text-3xl font-bold tracking-tight">Görev Panosu</h1> {/* Daha büyük başlık */}
+          <p className="text-muted-foreground">Görevlerinizi yönetin ve ilerlemelerini takip edin.</p>
+        </div>
+        
+        {/* Yeni Görev Sheet (SheetContent içindeki form aynı kalacak) */}
+        <Sheet open={isSheetOpen} onOpenChange={(open) => { if (!open) resetForm(); setIsSheetOpen(open); }}>
+          <SheetTrigger asChild>
+            <Button onClick={resetForm} size="lg" className="shadow-md">
+              <Plus className="mr-2 h-5 w-5" /> Yeni Görev Oluştur
+            </Button>
+          </SheetTrigger>
+          <SheetContent className="sm:max-w-[550px] overflow-y-auto p-0">
+            <SheetHeader className="bg-muted/50 px-6 py-4 border-b">
+              <SheetTitle className="text-lg">{editingTask ? "Görevi Düzenle" : "Yeni Görev Oluştur"}</SheetTitle>
+              <SheetDescription>
+                {editingTask ? "Görevin detaylarını güncelleyin." : "Yeni bir görev için gerekli bilgileri girin."}
+              </SheetDescription>
+            </SheetHeader>
+            <form onSubmit={handleSubmit} className="px-6 py-4 space-y-4">
+              {/* ... form içeriği aynı ... */}
+              <div className="space-y-1">
+                <Label htmlFor="title">Görev Başlığı*</Label>
+                <Input id="title" name="title" value={formData.title} onChange={handleInputChange} required placeholder="örn: Trafo bakımı" />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="description">Açıklama</Label>
+                <Textarea id="description" name="description" value={formData.description || ""} onChange={handleInputChange} placeholder="Görevin detayları..." />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="projectId">Proje</Label>
+                <Select 
+                  name="projectId"
+                  value={formData.projectId || "other"}
+                  onValueChange={handleSelectChange('projectId')}
+                  disabled={!Array.isArray(projects) || projects.length === 0}
+                >
+                  <SelectTrigger id="projectId"><SelectValue placeholder="Proje seçin veya Diğer" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="other">Diğer (Projesiz)</SelectItem>
+                    {Array.isArray(projects) && projects.map(project => (
+                      <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="status">Durum</Label>
+                  <Select name="status" value={formData.status} onValueChange={handleSelectChange('status')}>
+                    <SelectTrigger id="status"><SelectValue placeholder="Durum seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(statusConfig).map(([key, { text, icon: Icon }]) => (
+                        <SelectItem key={key} value={key}><div className="flex items-center"><Icon className="mr-2 h-4 w-4 opacity-70" /> {text}</div></SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="priority">Öncelik</Label>
+                  <Select name="priority" value={formData.priority} onValueChange={handleSelectChange('priority')}>
+                    <SelectTrigger id="priority"><SelectValue placeholder="Öncelik seçin" /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(priorityConfig).map(([key, { text, icon: Icon }]) => (
+                        <SelectItem key={key} value={key}><div className="flex items-center"> <Icon className="mr-2 h-4 w-4 opacity-70" /> {text}</div></SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                 <div className="space-y-1">
+                    <Label htmlFor="assigneeIds">Atanan Kişiler</Label>
+                     <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" role="combobox" className={cn("w-full justify-between", selectedAssigneeIds.length === 0 && "text-muted-foreground")}>
+                            {getSelectedAssigneeNames()}
+                            <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[--radix-popover-trigger-width] p-0">
+                          <Command>
+                            <CommandInput placeholder="Çalışan ara..." value={employeeSearch} onValueChange={setEmployeeSearch}/>
+                            <CommandList>
+                              <CommandEmpty>Çalışan bulunamadı.</CommandEmpty>
+                              <CommandGroup>
+                                {employees
+                                .filter(emp => `${emp.name || ''} ${emp.surname || ''}`.toLowerCase().includes(employeeSearch.toLowerCase()))
+                                .map((employee) => (
+                                  <CommandItem key={employee.id} value={`${employee.name} ${employee.surname || ''}`} onSelect={() => handleEmployeeSelect(employee.id)}>
+                                    <Check className={cn("mr-2 h-4 w-4", selectedAssigneeIds.includes(employee.id) ? "opacity-100" : "opacity-0")}/>
+                                    <span className="flex items-center">
+                                      {employee.profilePictureUrl ? (
+                                        <img src={employee.profilePictureUrl} alt={`${employee.name} ${employee.surname || ''}`} className="h-5 w-5 rounded-full mr-1.5 object-cover" />
+                                      ) : (
+                                        <div className="h-5 w-5 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-xs font-medium text-gray-600 dark:text-gray-300 mr-1.5">
+                                          {(employee.name?.charAt(0) || '').toUpperCase()}
+                                        </div>
+                                      )}
+                                      {employee.name} {employee.surname || ''}
+                                      <span className="ml-2 text-xs text-muted-foreground">({employee.position || 'Pozisyon Yok'})</span>
+                                    </span>
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                             </CommandList>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="dueDate">Bitiş Tarihi</Label>
+                  <Input id="dueDate" type="date" value={getDueDateString(formData.dueDate)} onChange={handleInputChange} name="dueDate"/>
+                </div>
+              </div>
+              <SheetFooter className="pt-4 border-t mt-2">
+                <SheetClose asChild><Button type="button" variant="outline">İptal</Button></SheetClose>
+                <Button type="submit" disabled={isSubmitting} className="shadow-sm">
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {editingTask ? "Değişiklikleri Kaydet" : "Görevi Oluştur"}
+                </Button>
+              </SheetFooter>
+            </form>
+          </SheetContent>
+        </Sheet>
+      </div> 
+      
+      <div className="flex flex-col sm:flex-row gap-4 items-center mb-6">
+        <div className="relative w-full sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Görevlerde ara..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 w-full shadow-sm"
+          />
+        </div>
+      </div>
+      
+       {loadingError && (
+        <Alert variant="destructive" className="mb-4 shadow">
+          <AlertCircle className="h-4 w-4" />
+          <AlertTitle>Veri Yükleme Hatası</AlertTitle>
+          <AlertDescription>{loadingError}</AlertDescription>
+        </Alert>
+      )}
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 bg-muted/60 p-1 rounded-lg shadow-inner">
+          <TabsTrigger 
+            value="aktif" 
+            className="py-2.5 text-sm font-medium data-[state=active]:bg-blue-500 data-[state=active]:text-white data-[state=active]:shadow-md rounded-md transition-all duration-150 ease-in-out hover:bg-blue-100 dark:hover:bg-blue-900/30"
+          >
+            Aktif Görevler <Badge variant="secondary" className="ml-2 bg-blue-200 text-blue-700">{getTasksForTab("aktif").length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="tamamlandi" 
+            className="py-2.5 text-sm font-medium data-[state=active]:bg-green-500 data-[state=active]:text-white data-[state=active]:shadow-md rounded-md transition-all duration-150 ease-in-out hover:bg-green-100 dark:hover:bg-green-900/30"
+          >
+            Tamamlanmış <Badge variant="secondary" className="ml-2 bg-green-200 text-green-700">{getTasksForTab("tamamlandi").length}</Badge>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="iptal" 
+            className="py-2.5 text-sm font-medium data-[state=active]:bg-red-500 data-[state=active]:text-white data-[state=active]:shadow-md rounded-md transition-all duration-150 ease-in-out hover:bg-red-100 dark:hover:bg-red-900/30"
+          >
+            İptal Edilmiş <Badge variant="secondary" className="ml-2 bg-red-200 text-red-700">{getTasksForTab("iptal").length}</Badge>
+          </TabsTrigger>
+        </TabsList>
+        <TabsContent value="aktif" className="mt-6">
+          {renderTaskTable(getTasksForTab("aktif"))}
+        </TabsContent>
+        <TabsContent value="tamamlandi" className="mt-6">
+          {renderTaskTable(getTasksForTab("tamamlandi"))}
+        </TabsContent>
+        <TabsContent value="iptal" className="mt-6">
+          {renderTaskTable(getTasksForTab("iptal"))}
+        </TabsContent>
+      </Tabs>
     </div>
   );
 } 

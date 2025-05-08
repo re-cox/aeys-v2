@@ -1,3 +1,6 @@
+// console.error("!!! API.TS DOSYASI KESİNLİKLE BU OLMALI - YENİ YOL /test-raporlar !!!"); // Daha dikkat çekici log
+console.log('[API Service] API dosyası yüklendi, test-raporlar yolu kullanılıyor');
+// console.log('>>>> DEBUG: api.ts MODIFIED AND LOADED - Path should be /test-raporlar <<<<');
 import axios, { AxiosError } from 'axios';
 import { TeknisyenRaporu, TeknisyenRaporuDurum, Personel, TeknisyenDokuman } from '@/types/teknisyen';
 import { toast } from "sonner";
@@ -127,7 +130,7 @@ export const getTeknisyenRaporlari = async (durum?: TeknisyenRaporuDurum): Promi
   try {
     console.log(`API Çağrısı: getTeknisyenRaporlari (durum: ${durum})`);
     const params = durum ? { durum } : {};
-    const response = await apiClient.get('/teknisyen-raporlari', { params });
+    const response = await apiClient.get('/test-raporlar', { params });
     // TODO: API'den dönen tarih string'lerini Date nesnesine çevir (gerekirse)
     return response.data as TeknisyenRaporu[];
 

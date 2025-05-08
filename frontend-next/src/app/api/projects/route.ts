@@ -71,24 +71,53 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { name, description, status, priority, startDate, endDate, budget, managerId, teamMembers } = body;
+        const { name, description, status, startDate, endDate, budget, managerId, teamMembers, departmentId } = body;
 
         // Basic validation
         if (!name) {
             return NextResponse.json({ success: false, message: 'Proje adı zorunludur.' }, { status: 400 });
         }
 
+        // Check for required departmentId
+        if (!departmentId) {
+            console.warn('[API Projects POST] departmentId required field is missing');
+            return NextResponse.json({ 
+                success: false, 
+                message: 'Departman ID zorunlu bir alandır. Lütfen bir departman seçin.' 
+            }, { status: 400 });
+        }
+
+        // Frontend'den gelen status değerini backend enum'a çevir
+        const mapStatusToBackend = (frontendStatus: string): 'PLANNING' | 'STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED' => {
+            const statusMap: Record<string, 'PLANNING' | 'STARTED' | 'IN_PROGRESS' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED'> = {
+                'active': 'IN_PROGRESS',
+                'planned': 'PLANNING',
+                'completed': 'COMPLETED',
+                'on-hold': 'ON_HOLD',
+                'cancelled': 'CANCELLED'
+            };
+            
+            // Eğer eşleşme bulunamazsa varsayılan değer dön
+            return statusMap[frontendStatus] || 'PLANNING';
+        };
+        
         // Validate managerId if provided
         if (managerId) {
-            const manager = await prisma.employee.findUnique({
-                where: { id: managerId }
-            });
-            
-            if (!manager) {
-                return NextResponse.json({ 
-                    success: false, 
-                    message: `Geçersiz yönetici ID'si: ${managerId}. Bu ID'ye sahip çalışan bulunamadı.` 
-                }, { status: 400 });
+            try {
+                const manager = await prisma.employee.findUnique({
+                    where: { id: managerId }
+                });
+                
+                if (!manager) {
+                    return NextResponse.json({ 
+                        success: false, 
+                        message: `Geçersiz yönetici ID'si: ${managerId}. Bu ID'ye sahip çalışan bulunamadı.` 
+                    }, { status: 400 });
+                }
+            } catch (error) {
+                console.error('[API Projects POST] Error validating manager:', error);
+                // managerId alanı kullanılmayacak - backend'de böyle bir alan yok
+                // Sadece log amaçlı kontrol ediyoruz
             }
         }
 
@@ -98,53 +127,23 @@ export async function POST(request: Request) {
                 data: {
                     name,
                     description,
-                    status: status || 'PLANNING', // Ensure valid value with default
-                    priority: priority || 'MEDIUM', // Ensure valid value with default
-                    startDate: startDate ? new Date(startDate) : null,
+                    status: mapStatusToBackend(status || 'planned'), // Frontend'den backend'e dönüşüm
+                    startDate: startDate ? new Date(startDate) : new Date(), // Provide current date if missing
                     endDate: endDate ? new Date(endDate) : null,
                     budget: budget ? parseFloat(budget) : null,
-                    managerId,
-                    // Team members will be added in a separate operation if needed
+                    departmentId, // Make sure to include departmentId
+                    // NOT: Backend'de managerId alanı bulunmuyor
                 },
-                include: { // Include relations in the response
-                    manager: true,
+                include: { 
+                    // Doğru ilişki isimleri kullanılmalıdır
+                    Department: true, // Backend şemasında Department olarak tanımlı
                 }
             });
             
-            // Handle team members separately if provided
-            if (teamMembers && teamMembers.length > 0) {
-                for (const memberId of teamMembers) {
-                    // Check if employee exists
-                    const employee = await prisma.employee.findUnique({
-                        where: { id: memberId }
-                    });
-                    
-                    if (!employee) {
-                        console.warn(`Ekip üyesi eklenemedi: ${memberId} ID'li çalışan bulunamadı.`);
-                        continue;
-                    }
-                    
-                    // Add team member
-                    await prisma.projectTeamMember.create({
-                        data: {
-                            projectId: newProject.id,
-                            employeeId: memberId,
-                        }
-                    });
-                }
-                
-                // Re-fetch project with team after adding members
-                const projectWithTeam = await prisma.project.findUnique({
-                    where: { id: newProject.id },
-                    include: {
-                        manager: true,
-                        team: { include: { employee: true } },
-                    }
-                });
-                
-                return NextResponse.json({ success: true, data: projectWithTeam }, { status: 201 });
-            }
-
+            // NOT: Backend'de ProjectTeamMember modeli veya ilişkisi bulunmuyor
+            // Takım üyeleri için ayrı bir tablo oluşturmak gerekecek
+            // Şimdilik bu kısmı atlayalım
+            
             return NextResponse.json({ success: true, data: newProject }, { status: 201 });
         } catch (prismaError) {
             console.error('[API Projects POST] Prisma Error:', prismaError);
@@ -159,7 +158,7 @@ export async function POST(request: Request) {
                 } else if (prismaError.code === 'P2003') { // Foreign key constraint failed
                     return NextResponse.json({ 
                         success: false, 
-                        message: 'Geçersiz yönetici veya ekip üyesi ID\'si sağlandı. Lütfen geçerli ID\'ler kullanın.' 
+                        message: 'Geçersiz referans ID\'si sağlandı. Lütfen geçerli ID\'ler kullanın.' 
                     }, { status: 400 });
                 }
             }

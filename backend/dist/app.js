@@ -14,13 +14,15 @@ const teknisyen_rapor_routes_1 = __importDefault(require("./routes/teknisyen-rap
 const role_routes_1 = __importDefault(require("./routes/role.routes")); // Yorumu kaldırıldı
 // import { errorHandler } from './middleware/errorHandler'; // Yorum satırı - Dosya bulunamadı
 const error_handler_1 = require("./utils/error-handler"); // Yeni hata middleware'ini import et
-const customer_routes_1 = __importDefault(require("./routes/customer.routes")); // Yeni customer route'larını import et
-const proposal_routes_1 = __importDefault(require("./routes/proposal.routes")); // Teklif rotalarını import et
+const customers_routes_1 = __importDefault(require("./routes/customers.routes")); // Doğru olan bu
+const proposal_routes_1 = __importDefault(require("./routes/proposal.routes")); // Yorum kaldırıldı
 const edas_routes_1 = __importDefault(require("./routes/edas.routes")); // EDAS rotalarını import et
 const folder_routes_1 = __importDefault(require("./routes/folder.routes")); // Klasör rotaları
 const document_routes_1 = __importDefault(require("./routes/document.routes")); // Döküman rotaları
 const upload_routes_1 = __importDefault(require("./routes/upload.routes")); // Dosya yükleme rotaları
 const express_fileupload_1 = __importDefault(require("express-fileupload")); // Dosya yükleme paketi
+const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"));
+const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 // CORS ayarları (Frontend adresine izin ver)
@@ -36,7 +38,7 @@ app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
 app.use((0, express_fileupload_1.default)({
     useTempFiles: true,
     tempFileDir: '/tmp/',
-    createParentPath: true, // Parent klasörleri oluşturur
+    createParentPath: true,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
     debug: process.env.NODE_ENV === 'development' // Geliştirme modunda debug aktif
 }));
@@ -59,12 +61,14 @@ app.use('/api/employees', employee_routes_1.default); // Yeni employee route'lar
 app.use('/api/teknisyen-raporlari', teknisyen_rapor_routes_1.default);
 // Orijinal rol route'u tekrar aktif edildi (ama 404 verebilir)
 app.use('/api/roles', role_routes_1.default);
-app.use('/api/customers', customer_routes_1.default); // Yeni customer route'larını kullan (doğru yere taşındı)
-app.use('/api/proposals', proposal_routes_1.default); // Teklif rotalarını kullan
+app.use('/api/customers', customers_routes_1.default); // Yeni customer route'larını kullan (doğru yere taşındı)
+app.use('/api/proposals', proposal_routes_1.default); // Yorum kaldırıldı
 app.use('/api', edas_routes_1.default); // EDAS rotaları
 app.use('/api/folders', folder_routes_1.default); // Klasör rotaları eklendi
 app.use('/api/documents', document_routes_1.default); // Döküman rotaları eklendi
 app.use('/api/uploads', upload_routes_1.default); // Dosya yükleme rotaları eklendi
+app.use('/api/attendances', attendance_routes_1.default);
+app.use('/api/auth', auth_routes_1.default);
 // 404 - Bulunamayan Rotalar
 app.use((req, res) => {
     res.status(404).json({

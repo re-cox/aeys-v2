@@ -9,7 +9,7 @@ const path_1 = __importDefault(require("path"));
 const fs_1 = __importDefault(require("fs"));
 // Yükleme klasörlerinin yolları
 const UPLOAD_DIRS = {
-    profile: path_1.default.join(__dirname, '../../uploads/profile'),
+    profile: path_1.default.join(__dirname, '../../uploads/profile-pictures'),
     documents: path_1.default.join(__dirname, '../../uploads/documents'),
     // Gerekirse diğer tipler için de eklenebilir
 };

@@ -8,8 +8,8 @@ import {
 // import { Currency } from '@prisma/client'; // Doğrudan kullanılmıyor
 import { mapResponseToProposal, mapResponseToProposalItem } from "@/utils/mappers";
 
-// API URL'sini doğrudan göreceli yol olarak ayarla
-const API_BASE_URL = '/api/proposals';
+// API URL'sini backend'e yönlendir
+const API_BASE_URL = `${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001/api'}/proposals`;
 
 /**
  * Tüm teklifleri API'den getirir.

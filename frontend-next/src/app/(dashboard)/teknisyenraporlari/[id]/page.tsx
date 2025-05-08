@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { getTeknisyenRaporu, deleteTeknisyenDokuman, deleteTeknisyenRaporu } from '@/services/teknisyenRaporService';
-import { TeknisyenRaporu, TeknisyenDokuman } from '@/types/teknisyen';
+import { getTeknisyenRaporu, deleteTeknisyenDokuman, deleteTeknisyenRaporu, getPersoneller } from '@/services/teknisyenRaporService';
+import { TeknisyenRaporu, TeknisyenDokuman, Personel } from '@/types/teknisyen';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,105 @@ const durumRenkleri: { [key: string]: string } = {
   'İptal Edildi': 'bg-red-500 hover:bg-red-600',
 };
 
+// Tarih formatlamak için güvenli bir yardımcı fonksiyon
+const formatTarih = (tarih?: string | Date | null) => {
+  if (!tarih) return "-";
+  try {
+    const tarihObj = new Date(tarih);
+    // Geçerli bir tarih mi kontrol et
+    if (isNaN(tarihObj.getTime())) {
+      console.error("Geçersiz tarih değeri:", tarih);
+      return "-";
+    }
+    return format(tarihObj, 'PPP HH:mm', { locale: tr });
+  } catch (error) {
+    console.error("Tarih formatlama hatası:", error, tarih);
+    return "-";
+  }
+};
+
+// Açıklama metninden rapor bilgi numarasını çıkaran yardımcı fonksiyon
+const extractRaporBilgiNo = (aciklama?: string): string => {
+  if (!aciklama) return "-";
+  
+  try {
+    // "Rapor Bilgi No: XYZ" formatını ara
+    const match = aciklama.match(/Rapor Bilgi No: ([^\n]+)/);
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+  } catch (error) {
+    console.error("Rapor bilgi numarası çıkarılırken hata:", error);
+  }
+  
+  return "-";
+};
+
+// Açıklama metninden bitiş tarihini çıkaran yardımcı fonksiyon
+const extractBitisTarihi = (aciklama?: string): string => {
+  if (!aciklama) return "-";
+  
+  try {
+    // "Bitiş Tarihi: XYZ" formatını ara
+    const match = aciklama.match(/Bitiş Tarihi: ([^\n]+)/);
+    if (match && match[1]) {
+      try {
+        const tarihStr = match[1].trim();
+        return formatTarih(tarihStr);
+      } catch (e) {
+        return match[1].trim();
+      }
+    }
+  } catch (error) {
+    console.error("Bitiş tarihi çıkarılırken hata:", error);
+  }
+  
+  return "-";
+};
+
+// Açıklama metninden ilgili personelleri çıkaran yardımcı fonksiyon
+const extractIlgiliPersonel = (aciklama?: string): string[] => {
+  if (!aciklama) return [];
+  
+  try {
+    // "İlgili Personel IDs: XYZ" formatını ara
+    const match = aciklama.match(/İlgili Personel IDs: ([^\n]+)/);
+    if (match && match[1]) {
+      return match[1].trim().split(', ').filter(Boolean);
+    }
+  } catch (error) {
+    console.error("İlgili personel çıkarılırken hata:", error);
+  }
+  
+  return [];
+};
+
+// Doküman URL'ini doğru şekilde oluşturmak için yardımcı fonksiyon
+const getDocumentUrl = (doc: TeknisyenDokuman): string => {
+  // API_URL değeri
+  const apiUrlBase = API_URL || 'http://localhost:3000/api';
+  
+  // Doküman URL'ini kontrol et
+  let docUrl = '';
+  
+  // dosyaUrl veya dosyaYolu özelliklerinden birisi varsa kullan
+  if (doc.dosyaUrl) {
+    docUrl = doc.dosyaUrl.startsWith('http') ? doc.dosyaUrl : `${apiUrlBase}${doc.dosyaUrl}`;
+  } else if (doc.dosyaYolu) {
+    docUrl = doc.dosyaYolu.startsWith('http') ? doc.dosyaYolu : `${apiUrlBase}${doc.dosyaYolu}`;
+  } else {
+    // Varsayılan URL (bu durumda bir hata olabilir)
+    console.error('Doküman için URL bulunamadı:', doc);
+    docUrl = '#'; // Geçersiz bağlantı - bu durum kullanıcıya uygun şekilde gösterilmeli
+  }
+  
+  return docUrl;
+};
+
+// Personel ID'sine göre personel bilgisini getiren fonksiyon
+const getPersonelById = (id: string, personeller: Personel[]): Personel | undefined => {
+  return personeller.find(p => p.id === id);
+};
 
 const RaporDetayPage = () => {
   const router = useRouter();
@@ -37,6 +136,7 @@ const RaporDetayPage = () => {
   const [isLoadingDokuman, setIsLoadingDokuman] = useState(true);
   const [isDeletingRapor, setIsDeletingRapor] = useState(false);
   const [deletingDokumanId, setDeletingDokumanId] = useState<string | null>(null);
+  const [personeller, setPersoneller] = useState<Personel[]>([]);
 
   const fetchData = useCallback(async () => {
     if (!raporId) {
@@ -53,9 +153,31 @@ const RaporDetayPage = () => {
     setDokumanlar([]);
 
     try {
+      console.log('Rapor getiriliyor, ID:', raporId);
       const raporData = await getTeknisyenRaporu(raporId);
-      setRapor(raporData);
+      console.log('Backend\'den gelen rapor verileri:', raporData);
+      
+      // Backend'den gelen verileri frontend yapısına uyarla
+      const processedRapor: TeknisyenRaporu = {
+        ...raporData,
+        isinAdi: raporData.baslik || raporData.isinAdi,
+        teknisyenNo: raporData.teknisyenNo || raporData.teknisyenId,
+        baslangicTarihi: raporData.tarih || raporData.baslangicTarihi,
+        bitisTarihi: raporData.bitisTarihi,
+        olusturulmaTarihi: raporData.createdAt || raporData.olusturulmaTarihi,
+        guncellemeTarihi: raporData.updatedAt || raporData.guncellemeTarihi
+      };
+      
+      setRapor(processedRapor);
       setDokumanlar(raporData.dokumanlar || []);
+
+      // Personel verilerini getir
+      try {
+        const personelListesi = await getPersoneller();
+        setPersoneller(personelListesi);
+      } catch (personelError) {
+        console.error("Personel verileri getirilirken hata:", personelError);
+      }
 
     } catch (error: any) {
       console.error("Rapor veya dokümanlar getirilirken hata:", error);
@@ -195,13 +317,22 @@ const RaporDetayPage = () => {
         <CardHeader>
           <div className="flex justify-between items-start gap-4">
               <div>
-                 <CardTitle className="text-2xl">{rapor.isinAdi}</CardTitle>
-                 <CardDescription>Teknisyen No: {rapor.teknisyenNo}</CardDescription>
+                 <CardTitle className="text-2xl">{rapor?.baslik || rapor?.isinAdi || 'İsimsiz Rapor'}</CardTitle>
+                 <CardDescription>
+                   Teknisyen No: {rapor?.teknisyenNo || rapor?.teknisyenId || 'Belirtilmemiş'}
+                   {rapor?.aciklama && rapor.aciklama.includes('Rapor Bilgi No:') && (
+                     <span className="block mt-1 text-sm">
+                       {rapor.aciklama.split('\n\n')[0]}
+                     </span>
+                   )}
+                 </CardDescription>
               </div>
               <div className="flex items-center space-x-2 flex-shrink-0">
-                 <Badge className={`${durumRenkleri[rapor.durum]} text-white`}>{rapor.durum}</Badge>
+                 <Badge className={`${durumRenkleri[rapor?.durum || ''] || 'bg-gray-500'} text-white`}>
+                   {rapor?.durum || 'Bilinmiyor'}
+                 </Badge>
                   <Button variant="outline" size="icon" asChild title="Düzenle">
-                       <Link href={`/teknisyenraporlari/${rapor.id}/duzenle`}>
+                       <Link href={`/teknisyenraporlari/${rapor?.id}/duzenle`}>
                           <Pencil className="h-4 w-4" />
                        </Link>
                   </Button>
@@ -209,7 +340,7 @@ const RaporDetayPage = () => {
                        variant="destructive"
                        size="icon"
                        onClick={handleRaporSil}
-                       disabled={isDeletingRapor}
+                       disabled={isDeletingRapor || !rapor}
                        title="Sil"
                     >
                        {isDeletingRapor ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -222,21 +353,47 @@ const RaporDetayPage = () => {
             <h3 className="font-semibold text-lg mb-2">Detaylar</h3>
              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4">
                <div>
+                 <Label className="text-sm font-medium text-muted-foreground">Rapor Bilgi No:</Label>
+                 <p className="font-semibold">
+                   {/* Açıklama alanından rapor bilgi numarasını çıkar */}
+                   {extractRaporBilgiNo(rapor?.aciklama)}
+                 </p>
+               </div>
+               <div>
                  <Label className='text-sm font-medium text-muted-foreground'>Başlangıç Tarihi:</Label>
-                 <p className="font-semibold">{rapor.baslangicTarihi ? format(new Date(rapor.baslangicTarihi), 'PPP HH:mm', { locale: tr }) : '-'}</p>
+                 <p className="font-semibold">
+                   {rapor?.tarih ? formatTarih(rapor.tarih) : 
+                    rapor?.baslangicTarihi ? formatTarih(rapor.baslangicTarihi) : '-'}
+                 </p>
                </div>
                <div>
                  <Label className='text-sm font-medium text-muted-foreground'>Bitiş Tarihi:</Label>
-                 <p className="font-semibold">{rapor.bitisTarihi ? format(new Date(rapor.bitisTarihi), 'PPP HH:mm', { locale: tr }) : 'Tamamlanmadı'}</p>
+                 <p className="font-semibold">
+                   {/* Açıklama alanından bitiş tarihini çıkar */}
+                   {extractBitisTarihi(rapor?.aciklama)}
+                 </p>
+               </div>
+               <div>
+                 <Label className='text-sm font-medium text-muted-foreground'>İlgili Personel:</Label>
+                 <p className="font-semibold">
+                   {/* Açıklama alanından ilgili personeli çıkar */}
+                   {extractIlgiliPersonel(rapor?.aciklama).join(', ')}
+                 </p>
                </div>
                 <div>
                  <Label className='text-sm font-medium text-muted-foreground'>Oluşturulma Tarihi:</Label>
-                 <p>{format(new Date(rapor.olusturulmaTarihi), 'PPP HH:mm', { locale: tr })}</p>
+                 <p>
+                   {rapor?.createdAt ? formatTarih(rapor.createdAt) : 
+                    rapor?.olusturulmaTarihi ? formatTarih(rapor.olusturulmaTarihi) : '-'}
+                 </p>
                </div>
-               {rapor.guncellemeTarihi && (
+               {(rapor?.updatedAt || rapor?.guncellemeTarihi) && (
                  <div>
                    <Label className='text-sm font-medium text-muted-foreground'>Son Güncelleme:</Label>
-                   <p>{format(new Date(rapor.guncellemeTarihi), 'PPP HH:mm', { locale: tr })}</p>
+                   <p>
+                     {rapor?.updatedAt ? formatTarih(rapor.updatedAt) : 
+                      rapor?.guncellemeTarihi ? formatTarih(rapor.guncellemeTarihi) : '-'}
+                   </p>
                  </div>
                )} 
              </div>
@@ -245,9 +402,27 @@ const RaporDetayPage = () => {
            <div>
              <h3 className="font-semibold text-lg mb-2">Görevli Personeller</h3>
              <div className="border rounded-md p-4">
-                 {rapor.personeller && rapor.personeller.length > 0
-                    ? <p className="text-sm text-muted-foreground">({rapor.personeller.length} personel görevli)</p>
-                    : <p className="text-sm text-muted-foreground">Personel atanmamış.</p>}
+                {(() => {
+                   // İlgili personellerden ID'leri ayıkla
+                   const personelIds = extractIlgiliPersonel(rapor?.aciklama);
+                   
+                   if (personelIds && personelIds.length > 0) {
+                     return (
+                       <ul className="list-disc list-inside space-y-1">
+                         {personelIds.map((personelId, index) => {
+                           const personel = getPersonelById(personelId, personeller);
+                           return (
+                             <li key={index} className="text-gray-700 dark:text-gray-300">
+                               {personel ? `${personel.name} ${personel.surname || ''}` : personelId}
+                             </li>
+                           );
+                         })}
+                       </ul>
+                     );
+                   } else {
+                     return <p className="text-gray-500">Görevli personel bilgisi bulunamadı.</p>;
+                   }
+                })()}
              </div>
            </div>
 
@@ -267,7 +442,7 @@ const RaporDetayPage = () => {
                            <div className="flex items-center space-x-3 overflow-hidden">
                               <FileText className="h-5 w-5 text-primary flex-shrink-0" />
                               <a
-                                  href={doc.dosyaYolu.startsWith('http') ? doc.dosyaYolu : `${API_URL}${doc.dosyaYolu}`}
+                                  href={getDocumentUrl(doc)}
                                   target="_blank" 
                                   rel="noopener noreferrer"
                                   className="text-sm font-medium text-primary hover:underline truncate"
@@ -278,7 +453,8 @@ const RaporDetayPage = () => {
                            </div>
                            <div className='flex items-center flex-shrink-0 space-x-1'>
                                 <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="İndir">
-                                     <a href={doc.dosyaYolu.startsWith('http') ? doc.dosyaYolu : `${API_URL}${doc.dosyaYolu}`} target="_blank" rel="noopener noreferrer">
+                                     <a href={getDocumentUrl(doc)} 
+                                       target="_blank" rel="noopener noreferrer">
                                          <Download className="h-4 w-4" />
                                      </a>
                                 </Button>

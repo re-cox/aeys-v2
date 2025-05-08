@@ -9,6 +9,10 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const department_routes_1 = __importDefault(require("./routes/department.routes"));
 const user_routes_1 = __importDefault(require("./routes/user.routes"));
 const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"));
+// import progressPaymentRoutes from './routes/progressPayment.routes'; // Yorumlandı
+const customers_routes_1 = __importDefault(require("./routes/customers.routes"));
+// import proposalRoutes from './routes/proposal.routes'; // Yorumlandı (Eğer import ediliyorsa)
+const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 // Ortam değişkenlerini yükle
 dotenv_1.default.config();
 const app = (0, express_1.default)();
@@ -24,9 +28,10 @@ app.use((0, cors_1.default)({
 app.use('/api/departments', department_routes_1.default);
 app.use('/api/users', user_routes_1.default);
 app.use('/api/attendances', attendance_routes_1.default);
-// Progress Payments rotasını ekle
-const progressPayment_routes_1 = __importDefault(require("./routes/progressPayment.routes"));
-app.use('/api/progress-payments', progressPayment_routes_1.default);
+// app.use('/api/progress-payments', progressPaymentRoutes); // Yorumlandı
+app.use('/api/customers', customers_routes_1.default);
+// app.use('/api/proposals', proposalRoutes); // Yorumlandı (Eğer kullanılıyorsa)
+app.use('/api/auth', auth_routes_1.default);
 // ... (hata yönetimi middleware'i)
 const PORT = process.env.PORT || 5001;
 app.listen(PORT, () => {
