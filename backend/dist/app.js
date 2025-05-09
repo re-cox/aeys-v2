@@ -23,6 +23,8 @@ const upload_routes_1 = __importDefault(require("./routes/upload.routes")); // D
 const express_fileupload_1 = __importDefault(require("express-fileupload")); // Dosya yükleme paketi
 const attendance_routes_1 = __importDefault(require("./routes/attendance.routes"));
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
+const hakedis_routes_1 = __importDefault(require("./routes/hakedis.routes")); // Yeni hakediş route'larını import et
+const req_logger_middleware_1 = require("./middlewares/req-logger.middleware"); // Request logger middleware
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 // CORS ayarları (Frontend adresine izin ver)
@@ -32,16 +34,19 @@ const corsOptions = {
 };
 // CORS middleware'ini tüm istekler için başta uygula
 app.use((0, cors_1.default)(corsOptions));
+// Body parser middleware'leri - FormData için gerekli
 app.use(express_1.default.json({ limit: '50mb' })); // JSON boyut limitini artır (Base64 için)
 app.use(express_1.default.urlencoded({ limit: '50mb', extended: true }));
 // Dosya yükleme middleware'i
 app.use((0, express_fileupload_1.default)({
-    useTempFiles: true,
-    tempFileDir: '/tmp/',
+    useTempFiles: false,
     createParentPath: true,
     limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-    debug: process.env.NODE_ENV === 'development' // Geliştirme modunda debug aktif
+    debug: true, // Her zaman debug aktif
+    parseNested: true // Nested fields için parse etmeyi aktifleştir
 }));
+// Request logger middleware'i
+app.use(req_logger_middleware_1.requestLogger);
 // --- Statik Dosya Sunumu --- 
 // backend/public klasörünü statik olarak sun
 // CORS artık başta uygulandığı için buradaki istekler de kapsanacak
@@ -69,6 +74,7 @@ app.use('/api/documents', document_routes_1.default); // Döküman rotaları ekl
 app.use('/api/uploads', upload_routes_1.default); // Dosya yükleme rotaları eklendi
 app.use('/api/attendances', attendance_routes_1.default);
 app.use('/api/auth', auth_routes_1.default);
+app.use('/api/progress-payments', hakedis_routes_1.default); // Yeni hakediş route'larını kullan
 // 404 - Bulunamayan Rotalar
 app.use((req, res) => {
     res.status(404).json({

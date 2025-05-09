@@ -33,20 +33,12 @@ Object.values(UPLOAD_DIRS).forEach(dir => {
  * @returns Multer StorageEngine
  */
 const getMulterStorage = (type) => {
-    if (!UPLOAD_DIRS[type]) {
+    /*
+     if (!UPLOAD_DIRS[type]) {
         throw new Error(`Invalid upload type specified: ${type}`);
     }
-    return multer_1.default.diskStorage({
-        destination: (req, file, cb) => {
-            cb(null, UPLOAD_DIRS[type]); // Dosyanın kaydedileceği klasör
-        },
-        filename: (req, file, cb) => {
-            // Benzersiz dosya adı: timestamp-orijinal_ad
-            const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-            const extension = path_1.default.extname(file.originalname);
-            cb(null, file.fieldname + '-' + uniqueSuffix + extension);
-        }
-    });
+    */
+    return multer_1.default.memoryStorage();
 };
 exports.getMulterStorage = getMulterStorage;
 /**

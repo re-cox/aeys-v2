@@ -8,28 +8,30 @@ datasource db {
 }
 
 model User {
-  id                   String             @id @default(uuid())
-  email                String             @unique
-  name                 String?
-  surname              String?
-  passwordHash         String
-  roleId               String
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-  profilePictureUrl    String?
-  approvedLeaves       AnnualLeave[]      @relation("LeaveApprover")
-  annualLeaves         AnnualLeave[]      @relation("UserLeaves")
-  attendances          Attendance[]
-  uploadedDocuments    Document[]
-  createdFolders       Folder[]
-  employee             Employee?
-  tasks                Task[]
-  teknisyenDokumanlari TeknisyenDokuman[]
-  teknisyenRaporlari   TeknisyenRapor[]
-  role                 Role               @relation(fields: [roleId], references: [id])
-  assignedTasks        Task[]             @relation("TaskAssignee")
-  customers            Customer[] // Customer modeli ile ilişki eklendi
-  createdProposals     Proposal[]         @relation("ProposalCreator") // User->Proposal ilişkisi
+  id                    String             @id @default(uuid())
+  email                 String             @unique
+  name                  String?
+  surname               String?
+  passwordHash          String
+  roleId                String
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  profilePictureUrl     String?
+  approvedLeaves        AnnualLeave[]      @relation("LeaveApprover")
+  annualLeaves          AnnualLeave[]      @relation("UserLeaves")
+  attendances           Attendance[]
+  customers             Customer[]
+  uploadedDocuments     Document[]
+  employee              Employee?
+  createdFolders        Folder[]
+  olusturduguHakedisler Hakedis[]          @relation("OlusturanHakedisler")
+  onayladigiHakedisler  Hakedis[]          @relation("OnaylayanHakedisler")
+  createdProposals      Proposal[]         @relation("ProposalCreator")
+  tasks                 Task[]
+  teknisyenDokumanlari  TeknisyenDokuman[]
+  teknisyenRaporlari    TeknisyenRapor[]
+  role                  Role               @relation(fields: [roleId], references: [id])
+  assignedTasks         Task[]             @relation("TaskAssignee")
 }
 
 model Role {
@@ -70,13 +72,14 @@ model Project {
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   documents          Document[]
+  hakedisler         Hakedis[]
   customer           Customer?         @relation(fields: [customerId], references: [id])
   department         Department        @relation(fields: [departmentId], references: [id])
   site               Site?             @relation(fields: [siteId], references: [id])
+  proposals          Proposal[]
+  purchaseRequests   PurchaseRequest[]
   tasks              Task[]
   teknisyenRaporlari TeknisyenRapor[]
-  purchaseRequests   PurchaseRequest[]
-  proposals          Proposal[]         // Project->Proposal ilişkisi
 }
 
 model Task {
@@ -121,12 +124,12 @@ model Customer {
   status       CustomerStatus @default(ACTIVE)
   taxOffice    String?
   website      String?
-  userId       String? // Kullanıcı ilişkisi için alan eklendi (Geçici olarak isteğe bağlı yapıldı)
-  user         User?      @relation(fields: [userId], references: [id]) // User modeli ile ilişki tanımlandı (Geçici olarak isteğe bağlı yapıldı)
+  userId       String?
   contacts     Contact[]
+  user         User?          @relation(fields: [userId], references: [id])
   documents    Document[]
   projects     Project[]
-  proposals    Proposal[]         // Customer->Proposal ilişkisi
+  proposals    Proposal[]
 }
 
 model Contact {
@@ -157,45 +160,41 @@ model Attendance {
 }
 
 model Folder {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   name        String
   description String?
   color       String?
   icon        String?
   parentId    String?
   createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // İlişkiler
-  parent    Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id])
-  children  Folder[]   @relation("FolderHierarchy")
-  documents Document[] @relation("FolderDocuments")
-  createdBy User       @relation(fields: [createdById], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  documents   Document[] @relation("FolderDocuments")
+  createdBy   User       @relation(fields: [createdById], references: [id])
+  parent      Folder?    @relation("FolderHierarchy", fields: [parentId], references: [id])
+  children    Folder[]   @relation("FolderHierarchy")
 }
 
 model Document {
-  id          String   @id @default(uuid())
-  name        String
+  id          String    @id @default(uuid())
   description String?
   fileUrl     String?
-  type        String   @default("file")
-  size        Int      @default(0)
-  mimeType    String?
-  content     String?
-  category    String?
-  folderId    String?
   projectId   String?
   customerId  String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  category    String?
+  content     String?
   createdById String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // İlişkiler
-  folder    Folder?   @relation("FolderDocuments", fields: [folderId], references: [id])
-  project   Project?  @relation(fields: [projectId], references: [id])
-  customer  Customer? @relation(fields: [customerId], references: [id])
-  createdBy User      @relation(fields: [createdById], references: [id])
+  folderId    String?
+  mimeType    String?
+  name        String
+  size        Int       @default(0)
+  type        String    @default("file")
+  createdBy   User      @relation(fields: [createdById], references: [id])
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  folder      Folder?   @relation("FolderDocuments", fields: [folderId], references: [id])
+  project     Project?  @relation(fields: [projectId], references: [id])
 }
 
 model Site {
@@ -225,7 +224,6 @@ model Inventory {
 model Assignment {
   id          String    @id @default(uuid())
   inventoryId String
-  employeeId  String
   quantity    Int
   assignDate  DateTime
   returnDate  DateTime?
@@ -233,8 +231,9 @@ model Assignment {
   note        String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
-  inventory   Inventory @relation(fields: [inventoryId], references: [id])
+  employeeId  String
   employee    Employee  @relation("AssetAssignee", fields: [employeeId], references: [id])
+  inventory   Inventory @relation(fields: [inventoryId], references: [id])
 }
 
 model TeknisyenRapor {
@@ -248,6 +247,7 @@ model TeknisyenRapor {
   siteId      String?
   createdAt   DateTime            @default(now())
   updatedAt   DateTime            @updatedAt
+  bitisTarihi DateTime?
   dokumanlar  TeknisyenDokuman[]
   proje       Project?            @relation(fields: [projeId], references: [id])
   site        Site?               @relation(fields: [siteId], references: [id])
@@ -305,10 +305,10 @@ model Employee {
   emergencyContactName          String?
   emergencyContactPhone         String?
   emergencyContactRelation      String?
+  assignedAssets                Assignment[]       @relation("AssetAssignee")
   department                    Department?        @relation(fields: [departmentId], references: [id])
   user                          User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents                     EmployeeDocument[]
-  assignedAssets                Assignment[]       @relation("AssetAssignee")
   purchaseRequestsMade          PurchaseRequest[]  @relation("RequestsMade")
   purchaseRequestsStatusChanged PurchaseRequest[]  @relation("RequestsStatusChanged")
 }
@@ -326,6 +326,154 @@ model EmployeeDocument {
   employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@index([employeeId])
+}
+
+model EdasNotification {
+  id              String                 @id @default(uuid())
+  refNo           String                 @unique
+  company         String
+  projectName     String?
+  applicationType String
+  customerName    String
+  city            String?
+  district        String?
+  parcelBlock     String?
+  parcelNo        String?
+  status          String
+  currentStep     String
+  notes           String?
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  steps           EdasNotificationStep[]
+}
+
+model EdasNotificationStep {
+  id             String                     @id @default(uuid())
+  notificationId String
+  stepType       String
+  status         String
+  notes          String?
+  refNo          String?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  documents      EdasNotificationDocument[]
+  notification   EdasNotification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+}
+
+model EdasNotificationDocument {
+  id           String               @id @default(uuid())
+  fileUrl      String
+  stepId       String
+  fileName     String
+  originalName String?
+  documentType String?
+  fileType     String
+  fileSize     Int
+  uploadedAt   DateTime             @default(now())
+  step         EdasNotificationStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
+}
+
+model PurchaseRequest {
+  id                String                @id @default(uuid())
+  requestNumber     String                @unique
+  requesterId       String
+  departmentId      String
+  projectId         String?
+  reason            String?
+  requiredDate      DateTime?
+  notes             String?
+  status            PurchaseRequestStatus @default(PENDING)
+  statusChangedById String?
+  statusChangedAt   DateTime?
+  rejectionReason   String?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  department        Department            @relation(fields: [departmentId], references: [id])
+  project           Project?              @relation(fields: [projectId], references: [id])
+  requester         Employee              @relation("RequestsMade", fields: [requesterId], references: [id])
+  statusChangedBy   Employee?             @relation("RequestsStatusChanged", fields: [statusChangedById], references: [id])
+  items             PurchaseRequestItem[]
+}
+
+model PurchaseRequestItem {
+  id                String          @id @default(uuid())
+  purchaseRequestId String
+  itemName          String
+  quantity          Float
+  unit              String
+  estimatedPrice    Float?
+  notes             String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  purchaseRequest   PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade)
+}
+
+model Proposal {
+  id             String         @id @default(uuid())
+  proposalNo     String         @unique
+  status         ProposalStatus @default(DRAFT)
+  customerId     String
+  projectId      String?
+  issueDate      DateTime       @default(now())
+  validUntilDate DateTime?
+  totalAmount    Float          @default(0.0)
+  notes          String?
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  createdBy      User           @relation("ProposalCreator", fields: [createdById], references: [id])
+  customer       Customer       @relation(fields: [customerId], references: [id])
+  project        Project?       @relation(fields: [projectId], references: [id])
+  items          ProposalItem[]
+
+  @@index([customerId])
+  @@index([projectId])
+  @@index([createdById])
+}
+
+model ProposalItem {
+  id          String   @id @default(uuid())
+  proposalId  String
+  description String
+  quantity    Float    @default(1.0)
+  unitPrice   Float    @default(0.0)
+  totalPrice  Float
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  proposal    Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade)
+
+  @@index([proposalId])
+}
+
+model Hakedis {
+  id              String       @id @default(uuid())
+  hakedisNo       String       @unique
+  projeId         String
+  aciklama        String?
+  hakedisTarihi   DateTime     @default(now())
+  baslangicTarihi DateTime
+  bitisTarihi     DateTime
+  tutar           Float
+  kdvOrani        Float        @default(0.20)
+  kdvTutar        Float
+  toplamTutar     Float
+  paraBirimi      String       @default("TRY")
+  durum           HakedisDurum @default(TASLAK)
+  olusturanId     String
+  onaylayanId     String?
+  onayTarihi      DateTime?
+  odemeTarihi     DateTime?
+  odemeKanali     String?
+  odemeReferansNo String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  olusturan       User         @relation("OlusturanHakedisler", fields: [olusturanId], references: [id])
+  onaylayan       User?        @relation("OnaylayanHakedisler", fields: [onaylayanId], references: [id])
+  proje           Project      @relation(fields: [projeId], references: [id])
+
+  @@index([projeId])
+  @@index([olusturanId])
+  @@index([onaylayanId])
 }
 
 enum ProjectStatus {
@@ -357,6 +505,10 @@ enum TeknisyenRaporDurum {
   INCELENIYOR
   ONAYLANDI
   REDDEDILDI
+  BEKLEMEDE
+  FIYATLAR_GIRILDI
+  FATURA_KESILDI
+  IPTAL_EDILDI
 }
 
 enum LeaveStatus {
@@ -372,147 +524,27 @@ enum CustomerStatus {
   POTENTIAL
 }
 
-// EDAS/BEDAS Bildirimleri için modeller
-model EdasNotification {
-  id              String                 @id @default(uuid())
-  refNo           String                 @unique
-  company         String // "BEDAŞ" veya "AYEDAŞ"
-  projectName     String?
-  applicationType String // "NIHAI_BAGLANTI" veya "SANTIYE"
-  customerName    String
-  city            String?
-  district        String?
-  parcelBlock     String? // Ada
-  parcelNo        String? // Parsel
-  status          String // "PENDING", "APPROVED", "REJECTED"
-  currentStep     String // "PROJE", "BAGLANTI_GORUSU", vs.
-  notes           String?
-  createdAt       DateTime               @default(now())
-  updatedAt       DateTime               @updatedAt
-  steps           EdasNotificationStep[]
-}
-
-model EdasNotificationStep {
-  id             String                     @id @default(uuid())
-  notificationId String
-  stepType       String // Enum olarak tanımlanabilir (örn. BedasStepType)
-  status         String // Enum olarak tanımlanabilir (örn. StepStatus)
-  notes          String?
-  refNo          String?
-  createdAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
-  notification   EdasNotification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  documents      EdasNotificationDocument[]
-}
-
-model EdasNotificationDocument {
-  id           String               @id @default(uuid())
-  fileUrl      String
-  stepId       String
-  fileName     String // Multer tarafından üretilen benzersiz dosya adı
-  originalName String? // Yüklenen dosyanın orijinal adı (İsteğe bağlı yapıldı)
-  documentType String? // Belge türü (örn. "Proje Başvuru Dilekçesi") (İsteğe bağlı yapıldı)
-  fileType     String
-  fileSize     Int
-  uploadedAt   DateTime             @default(now())
-  step         EdasNotificationStep @relation(fields: [stepId], references: [id], onDelete: Cascade)
-}
-
-// Satın Alma Talebi Durumları
 enum PurchaseRequestStatus {
-  PENDING // Beklemede
-  APPROVED // Onaylandı
-  REJECTED // Reddedildi
-  COMPLETED // Tamamlandı (Teslim alındı vb.)
-  CANCELLED // İptal Edildi
-}
-
-// Satın Alma Talebi Ana Modeli
-model PurchaseRequest {
-  id                String                @id @default(uuid())
-  requestNumber     String                @unique // Örn: PR-2024-001
-  requesterId       String // Talebi oluşturan Employee ID'si
-  departmentId      String // İlişkili Departman ID'si
-  projectId         String? // İlişkili Proje ID'si (Opsiyonel)
-  reason            String? // Talep nedeni
-  requiredDate      DateTime? // İstenen teslim tarihi
-  notes             String? // Ek notlar
-  status            PurchaseRequestStatus @default(PENDING) // Talep durumu
-  statusChangedById String? // Durumu değiştiren Employee ID'si (Opsiyonel)
-  statusChangedAt   DateTime? // Durumun değiştiği zaman (Opsiyonel)
-  rejectionReason   String? // Reddedilme nedeni (Opsiyonel)
-  createdAt         DateTime              @default(now())
-  updatedAt         DateTime              @updatedAt
-
-  // İlişkiler
-  requester       Employee              @relation("RequestsMade", fields: [requesterId], references: [id])
-  department      Department            @relation(fields: [departmentId], references: [id])
-  project         Project?              @relation(fields: [projectId], references: [id])
-  statusChangedBy Employee?             @relation("RequestsStatusChanged", fields: [statusChangedById], references: [id])
-  items           PurchaseRequestItem[] // Bu talebe ait malzeme kalemleri
-}
-
-// Satın Alma Talebi Malzeme Kalemi Modeli
-model PurchaseRequestItem {
-  id                String   @id @default(uuid())
-  purchaseRequestId String // İlişkili Satın Alma Talebi ID'si
-  itemName          String // Malzeme adı
-  quantity          Float // Miktar (Float veya Decimal kullanabilirsiniz)
-  unit              String // Birim (adet, kg, m vb.)
-  estimatedPrice    Float? // Tahmini birim fiyat (Opsiyonel, Float veya Decimal)
-  notes             String? // Kalem özelinde notlar (Opsiyonel)
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-
-  // İlişkiler
-  purchaseRequest PurchaseRequest @relation(fields: [purchaseRequestId], references: [id], onDelete: Cascade) // Talep silinince kalemler de silinsin
+  PENDING
+  APPROVED
+  REJECTED
+  COMPLETED
+  CANCELLED
 }
 
 enum ProposalStatus {
-  DRAFT     // Taslak
-  SENT      // Gönderildi
-  APPROVED  // Onaylandı
-  REJECTED  // Reddedildi
-  EXPIRED   // Süresi Doldu
+  DRAFT
+  SENT
+  APPROVED
+  REJECTED
+  EXPIRED
 }
 
-model Proposal {
-  id             String         @id @default(uuid())
-  proposalNo     String         @unique // Teklif No (örn: 20240729-001)
-  status         ProposalStatus @default(DRAFT) // Teklif Durumu
-  customerId     String         // İlişkili Müşteri ID'si
-  projectId      String?        // İlişkili Proje ID'si (opsiyonel)
-  issueDate      DateTime       @default(now()) // Oluşturulma/Gönderilme Tarihi
-  validUntilDate DateTime?      // Geçerlilik Tarihi
-  totalAmount    Float          @default(0.0) // Toplam Tutar (Items'dan hesaplanabilir veya manuel girilebilir)
-  notes          String?        // Notlar
-  createdById    String         // Teklifi Oluşturan Kullanıcı ID'si
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
-
-  // İlişkiler (karşı ilişkilerle güncellendi)
-  customer    Customer       @relation(fields: [customerId], references: [id])
-  project     Project?       @relation(fields: [projectId], references: [id])
-  createdBy   User           @relation("ProposalCreator", fields: [createdById], references: [id])
-  items       ProposalItem[] // Teklif Kalemleri (Bir teklifte birden çok kalem olabilir)
-
-  @@index([customerId])
-  @@index([projectId])
-  @@index([createdById])
-}
-
-model ProposalItem {
-  id          String   @id @default(uuid())
-  proposalId  String   // Bağlı olduğu Teklif ID'si
-  description String   // Kalem Açıklaması
-  quantity    Float    @default(1.0)
-  unitPrice   Float    @default(0.0) // Birim Fiyat
-  totalPrice  Float    // Toplam Fiyat (quantity * unitPrice) - Otomatik hesaplanmalı veya girilmeli
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // İlişkiler
-  proposal Proposal @relation(fields: [proposalId], references: [id], onDelete: Cascade) // Teklif silinince kalemler de silinsin
-
-  @@index([proposalId])
+enum HakedisDurum {
+  TASLAK
+  ONAY_BEKLIYOR
+  ONAYLANDI
+  ODENDI
+  REDDEDILDI
+  IPTAL_EDILDI
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { TeknisyenRaporu, TeknisyenRaporuDurum } from "@/types/teknisyen";
+import { TeknisyenRaporu, TeknisyenRaporuDurum, TeknisyenDokuman } from "@/types/teknisyen";
 import { randomUUID } from "crypto";
 
 // In-memory veritabanı (geçici)
@@ -63,6 +63,8 @@ let teknisyenRaporlari: TeknisyenRaporu[] = [
   },
 ];
 
+let teknisyenDokumanlar: TeknisyenDokuman[] = [];
+
 // Tüm teknisyen raporlarını getir
 export async function GET(request: NextRequest) {
   try {
@@ -122,6 +124,52 @@ export async function POST(request: NextRequest) {
     console.error("Teknisyen raporu oluşturulurken hata:", error);
     return NextResponse.json(
       { message: "Teknisyen raporu oluşturulurken bir hata oluştu" },
+      { status: 500 }
+    );
+  }
+}
+
+// Yüklenen dokümanı teknisyen raporuna ilişkilendiren endpoint
+export async function PUT(request: NextRequest) {
+  try {
+    const data = await request.json();
+    
+    // Gerekli alanları kontrol et
+    if (!data.raporId || !data.dosyaUrl) {
+      return NextResponse.json(
+        { message: 'Gerekli alanlar eksik: raporId ve dosyaUrl gerekli' },
+        { status: 400 }
+      );
+    }
+    
+    const { raporId, dosyaUrl, dosyaAdi, dosyaTipu, dosyaBoyutu } = data;
+    
+    // Şimdiki zaman
+    const suAn = new Date().toISOString();
+    
+    // Yeni doküman oluştur
+    const yeniDokuman: TeknisyenDokuman = {
+      id: crypto.randomUUID(),
+      dosyaAdi: dosyaAdi || 'Bilinmeyen Dosya',
+      dosyaUrl: dosyaUrl,
+      dosyaYolu: dosyaUrl,
+      dosyaTipu: dosyaTipu || 'application/octet-stream',
+      dosyaBoyutu: dosyaBoyutu || 0,
+      createdAt: suAn,
+      yuklemeTarihi: suAn,
+      raporId: raporId
+    };
+    
+    // Dokümanı listeye ekle
+    teknisyenDokumanlar.push(yeniDokuman);
+    
+    console.log(`[TEKNISYEN DOKUMAN] Yeni doküman ilişkisi oluşturuldu: ${yeniDokuman.id} -> Rapor: ${raporId}`);
+    return NextResponse.json(yeniDokuman, { status: 201 });
+    
+  } catch (error) {
+    console.error('Doküman ilişkilendirme hatası:', error);
+    return NextResponse.json(
+      { message: 'Doküman rapor ile ilişkilendirilirken bir hata oluştu' },
       { status: 500 }
     );
   }

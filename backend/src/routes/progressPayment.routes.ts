@@ -11,14 +11,23 @@ import {
 
 const router = express.Router();
 
+// Önce özel rotalar
+
+// Proje finansal özetini getir
+router.get('/projects/:projectId/financial-summary', getProjectFinancialSummary);
+
+// Hakediş durumu güncelle
+router.put('/:id/status', updateProgressPaymentStatus);
+
+// Sonra genel rotalar
+
 // Tüm hakedişleri getir (opsiyonel projectId filtresi ile)
 router.get('/', getAllProgressPayments);
 
-// Belirli bir hakediş detayını getir
-router.get('/:id', getProgressPaymentById);
-
 // Yeni hakediş oluştur
 router.post('/', createProgressPayment);
+
+// En son ID parametresi içeren basit rotalar
 
 // Hakediş güncelle
 router.put('/:id', updateProgressPayment);
@@ -26,10 +35,7 @@ router.put('/:id', updateProgressPayment);
 // Hakediş sil
 router.delete('/:id', deleteProgressPayment);
 
-// Hakediş durumunu güncelle
-router.put('/:id/status', updateProgressPaymentStatus);
-
-// Proje finansal özetini getir
-router.get('/projects/:id/financial-summary', getProjectFinancialSummary);
+// Belirli bir hakediş getir (en sona koyuyoruz çünkü :id tüm path'leri yakalayabilir)
+router.get('/:id', getProgressPaymentById);
 
 export default router;

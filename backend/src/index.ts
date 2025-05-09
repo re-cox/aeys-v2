@@ -88,6 +88,46 @@ app.get('/', (req, res) => {
 });
 
 // Sunucuyu başlat
-app.listen(env.PORT, () => {
-  console.log(`Sunucu ${env.PORT} portunda çalışıyor`);
-}); 
+const PORT = process.env.PORT || 5001;
+const server = app.listen(PORT, async () => {
+  try {
+    console.log(`🟢 Server listening on port ${PORT}`);
+    
+    // Veritabanı bağlantısını kontrol et
+    await prisma.$connect();
+    console.log('🟢 Database connection successful');
+    
+  } catch (error) {
+    console.error('🔴 Server startup error:', error);
+  }
+});
+
+// Güvenli kapatma için cleanup
+const cleanup = async () => {
+  console.log('🟡 Shutting down server...');
+  
+  // HTTP sunucusunu kapat
+  server.close(() => {
+    console.log('🟡 HTTP server closed');
+  });
+  
+  // Veritabanı bağlantısını kapat
+  try {
+    await prisma.$disconnect();
+    console.log('🟡 Database connection closed');
+  } catch (e) {
+    console.error('🔴 Error during database disconnection:', e);
+  }
+  
+  // Dosya sürücüleri veya diğer kaynakları kapat
+  // ...
+  
+  // İşlemi sonlandır
+  process.exit(0);
+};
+
+// Kapatma sinyallerini yakala
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+
+export default server; 

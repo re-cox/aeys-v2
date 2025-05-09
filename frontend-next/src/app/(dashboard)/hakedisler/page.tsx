@@ -35,6 +35,7 @@ import {
   XCircle,
   BarChart4
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 import { 
   ProgressPayment, 
@@ -58,6 +59,7 @@ import { ProgressPaymentForm } from './components/ProgressPaymentForm';
 import { ProgressPaymentStatusDialog } from './components/ProgressPaymentStatusDialog';
 
 export default function HakedislerPage() {
+  const router = useRouter();
   const [selectedProjectId, setSelectedProjectId] = useState<string>('all');
   const [progressPayments, setProgressPayments] = useState<ProgressPayment[]>([]);
   const [projects, setProjects] = useState<{id: string, name: string}[]>([]);
@@ -130,8 +132,11 @@ export default function HakedislerPage() {
   }, [selectedProjectId]);
   
   // Hakediş ekleme işlemi
-  const handleAddProgressPayment = async (data: ProgressPaymentInput) => {
+  const handleAddProgressPayment = async (data: ProgressPaymentInput | FormData) => {
     try {
+      console.log("Hakediş ekleme işlemi başlatılıyor...");
+      console.log("Gönderilecek veri türü:", data instanceof FormData ? "FormData" : "JSON");
+      
       const newPayment = await createProgressPayment(data);
       setProgressPayments(prev => [newPayment, ...prev]);
       setIsFormOpen(false);
@@ -241,6 +246,11 @@ export default function HakedislerPage() {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' })
       .format(amount)
       .replace('₺', '') + ' ₺';
+  };
+
+  // Hakediş detayına git
+  const handleViewProgressPaymentDetail = (paymentId: string) => {
+    router.push(`/hakedisler/${paymentId}`);
   };
 
   return (
@@ -426,6 +436,7 @@ export default function HakedislerPage() {
                             variant="ghost" 
                             size="icon"
                             title="Detay Görüntüle"
+                            onClick={() => handleViewProgressPaymentDetail(payment.id)}
                           >
                             <Eye className="h-4 w-4" />
                           </Button>

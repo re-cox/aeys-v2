@@ -5,7 +5,11 @@ export type TeknisyenRaporuDurum =
   | "TASLAK"
   | "INCELENIYOR"
   | "ONAYLANDI"
-  | "REDDEDILDI";
+  | "REDDEDILDI"
+  | "BEKLEMEDE"
+  | "FIYATLAR_GIRILDI"
+  | "FATURA_KESILDI"
+  | "IPTAL_EDILDI";
 
 // UI'da görüntülenecek durum metinleri için yardımcı fonksiyon
 export const getDurumText = (durum: TeknisyenRaporuDurum): string => {
@@ -13,7 +17,11 @@ export const getDurumText = (durum: TeknisyenRaporuDurum): string => {
     "TASLAK": "Beklemede",
     "INCELENIYOR": "Fiyatlar Girildi",
     "ONAYLANDI": "Fatura Kesildi",
-    "REDDEDILDI": "İptal Edildi"
+    "REDDEDILDI": "İptal Edildi",
+    "BEKLEMEDE": "Beklemede",
+    "FIYATLAR_GIRILDI": "Fiyatlar Girildi",
+    "FATURA_KESILDI": "Fatura Kesildi",
+    "IPTAL_EDILDI": "İptal Edildi"
   };
   return durumMap[durum] || durum;
 };
@@ -27,7 +35,11 @@ export const getUIDurumFromBackend = (backendDurum: string): TeknisyenRaporuDuru
   if (upperDurum === "TASLAK" || 
       upperDurum === "INCELENIYOR" || 
       upperDurum === "ONAYLANDI" || 
-      upperDurum === "REDDEDILDI") {
+      upperDurum === "REDDEDILDI" ||
+      upperDurum === "BEKLEMEDE" ||
+      upperDurum === "FIYATLAR_GIRILDI" ||
+      upperDurum === "FATURA_KESILDI" ||
+      upperDurum === "IPTAL_EDILDI") {
     return upperDurum as TeknisyenRaporuDurum;
   }
   

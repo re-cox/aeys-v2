@@ -18,6 +18,8 @@ import uploadRoutes from './routes/upload.routes'; // Dosya yükleme rotaları
 import fileUpload from 'express-fileupload'; // Dosya yükleme paketi
 import attendanceRoutes from './routes/attendance.routes';
 import authRoutes from './routes/auth.routes';
+import hakedisRoutes from './routes/hakedis.routes'; // Yeni hakediş route'larını import et
+import { requestLogger } from './middlewares/req-logger.middleware'; // Request logger middleware
 
 dotenv.config();
 
@@ -31,17 +33,21 @@ const corsOptions = {
 // CORS middleware'ini tüm istekler için başta uygula
 app.use(cors(corsOptions)); 
 
+// Body parser middleware'leri - FormData için gerekli
 app.use(express.json({ limit: '50mb' })); // JSON boyut limitini artır (Base64 için)
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Dosya yükleme middleware'i
 app.use(fileUpload({
-  useTempFiles: true,
-  tempFileDir: '/tmp/',
+  useTempFiles: false,
   createParentPath: true,
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB limit
-  debug: process.env.NODE_ENV === 'development' // Geliştirme modunda debug aktif
+  debug: true, // Her zaman debug aktif
+  parseNested: true // Nested fields için parse etmeyi aktifleştir
 }));
+
+// Request logger middleware'i
+app.use(requestLogger);
 
 // --- Statik Dosya Sunumu --- 
 // backend/public klasörünü statik olarak sun
@@ -75,6 +81,7 @@ app.use('/api/documents', documentRoutes); // Döküman rotaları eklendi
 app.use('/api/uploads', uploadRoutes); // Dosya yükleme rotaları eklendi
 app.use('/api/attendances', attendanceRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/progress-payments', hakedisRoutes); // Yeni hakediş route'larını kullan
 
 // 404 - Bulunamayan Rotalar
 app.use((req, res) => {

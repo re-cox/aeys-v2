@@ -94,6 +94,39 @@ app.get('/', (req, res) => {
     res.send('Aydem Elektrik Yönetim Sistemi API');
 });
 // Sunucuyu başlat
-app.listen(env_1.env.PORT, () => {
-    console.log(`Sunucu ${env_1.env.PORT} portunda çalışıyor`);
+const PORT = process.env.PORT || 5001;
+const server = app.listen(PORT, () => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log(`🟢 Server listening on port ${PORT}`);
+        // Veritabanı bağlantısını kontrol et
+        yield prisma_1.prisma.$connect();
+        console.log('🟢 Database connection successful');
+    }
+    catch (error) {
+        console.error('🔴 Server startup error:', error);
+    }
+}));
+// Güvenli kapatma için cleanup
+const cleanup = () => __awaiter(void 0, void 0, void 0, function* () {
+    console.log('🟡 Shutting down server...');
+    // HTTP sunucusunu kapat
+    server.close(() => {
+        console.log('🟡 HTTP server closed');
+    });
+    // Veritabanı bağlantısını kapat
+    try {
+        yield prisma_1.prisma.$disconnect();
+        console.log('🟡 Database connection closed');
+    }
+    catch (e) {
+        console.error('🔴 Error during database disconnection:', e);
+    }
+    // Dosya sürücüleri veya diğer kaynakları kapat
+    // ...
+    // İşlemi sonlandır
+    process.exit(0);
 });
+// Kapatma sinyallerini yakala
+process.on('SIGTERM', cleanup);
+process.on('SIGINT', cleanup);
+exports.default = server;

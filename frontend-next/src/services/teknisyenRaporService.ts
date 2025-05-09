@@ -252,66 +252,61 @@ export const uploadTeknisyenDokuman = async (
   aciklama: string,
   yuklayanId?: string // Yükleme yapan kullanıcı ID'si, opsiyonel
 ): Promise<TeknisyenDokuman> => {
-  // Genel upload API'sini kullan
-  const uploadUrl = `/upload`;
-  console.log(`[${IS_SERVER ? 'SERVER' : 'CLIENT'}] POST (fetch) ${uploadUrl}`);
+  // Doğrudan teknisyen raporuna dosya yükle
+  const uploadUrl = `/test-raporlar/dokuman/yukle`;
+  console.log(`[${IS_SERVER ? 'SERVER' : 'CLIENT'}] POST ${uploadUrl}`);
+  
   try {
-    // 1. Önce dosyayı genel upload API'sine yükle
-    const uploadFormData = new FormData();
-    uploadFormData.append('files', file); // Genel upload API 'files' parametresi bekliyor
+    // FormData oluştur
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('raporId', raporId);
+    formData.append('yuklayanId', yuklayanId || '');
+    if (aciklama) formData.append('aciklama', aciklama);
     
+    // Kimlik bilgileri
     const token = localStorage.getItem('token');
     const headers: HeadersInit = {};
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
     
-    console.log(`Dosya yükleniyor: ${file.name}`);
+    console.log(`Dosya yükleniyor: ${file.name}, Rapor ID: ${raporId}`);
     const fullUploadUrl = `${API_BASE_URL}${uploadUrl}`;
-    console.log(`Tam URL: ${fullUploadUrl}`);
+    console.log(`Upload URL: ${fullUploadUrl}`);
     
+    // API isteği gönder
     const uploadResponse = await fetch(fullUploadUrl, {
       method: 'POST',
-      body: uploadFormData,
+      body: formData,
       headers
     });
 
+    // Hata kontrolü
     if (!uploadResponse.ok) {
       let errorBody = 'Dosya yükleme hatası detayı alınamadı.';
       try {
         errorBody = await uploadResponse.text();
       } catch (e) { /* ignore */ }
       console.error(`Dosya yükleme başarısız (${uploadResponse.status}): ${errorBody}`);
-      throw new Error(`Dosya yükleme işlemi başarısız oldu (HTTP ${uploadResponse.status})`);
+      throw new Error(`Doküman yükleme işlemi başarısız oldu (HTTP ${uploadResponse.status})`);
     }
 
+    // Başarılı sonucu al
     const uploadResult = await uploadResponse.json();
-    console.log('Dosya yükleme başarılı:', uploadResult);
+    console.log('Dokuman yükleme başarılı:', uploadResult);
     
-    if (!uploadResult.success || !uploadResult.files || uploadResult.files.length === 0) {
+    // Backend'in yanıt yapısı bir dizi değil, doğrudan nesne olduğundan 
+    // özel bir kontrol gerekmez, nesnedeki ID'yi kontrol edelim
+    if (!uploadResult || !uploadResult.id) {
       throw new Error('Dosya yükleme başarılı görünüyor ancak sonuç beklendiği gibi değil');
     }
     
-    // Yüklenen ilk dosyanın bilgilerini al
-    const uploadedFile = uploadResult.files[0];
-    
-    // 2. Mock TeknisyenDokuman oluştur (Normalde bu backend'de olurdu)
-    // Bu sürüm doğrulama için kullanılıyor, ancak doküman yükleme işleviselliğini göstermek için yeterli
-    const mockDokuman: TeknisyenDokuman = {
-      id: Date.now().toString(), // Gerçek bir ID olmadan sadece simülasyon
-      dosyaAdi: uploadedFile.fileName,
-      dosyaUrl: uploadedFile.fileUrl,
-      dosyaTipu: uploadedFile.fileType,
-      dosyaBoyutu: uploadedFile.fileSize,
-      createdAt: new Date().toISOString(),
-      raporId: raporId,
-      yuklemeTarihi: new Date().toISOString(),
-    };
-    
-    return mockDokuman;
+    // Yanıttaki doküman nesnesini döndür
+    return uploadResult;
   } catch (error) {
     console.error("Doküman yüklenirken hata:", error);
-    if (error instanceof Error && error.message.startsWith('Dosya yükleme işlemi başarısız oldu')) {
+    if (error instanceof Error && error.message.startsWith('Doküman yükleme işlemi başarısız oldu')) {
       throw error;
     }
     throw new Error("Doküman yüklenirken bir hata oluştu.");

@@ -9,7 +9,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, X, FileUp, UploadCloud, File as FileIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Form,
@@ -32,7 +32,7 @@ import { ProgressPaymentInput } from '@/types/progressPayment';
 interface ProgressPaymentFormProps {
   projects: { id: string; name: string }[];
   selectedProjectId?: string;
-  onSubmit: (data: ProgressPaymentInput) => Promise<boolean>;
+  onSubmit: (data: ProgressPaymentInput | FormData) => Promise<boolean>;
   onCancel: () => void;
 }
 
@@ -40,6 +40,11 @@ interface ProgressPaymentFormProps {
 const formSchema = z.object({
   projectId: z.string({
     required_error: 'Lütfen bir proje seçin',
+  }),
+  hakedisNo: z.string({
+    required_error: 'Hakediş numarası gereklidir',
+  }).min(3, {
+    message: 'Hakediş numarası en az 3 karakter olmalıdır',
   }),
   description: z.string({
     required_error: 'Açıklama gereklidir',
@@ -54,6 +59,7 @@ const formSchema = z.object({
   }),
   dueDate: z.date().optional().nullable(),
   notes: z.string().optional(),
+  files: z.any().optional() // Dosya alanı için şema
 });
 
 export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onCancel }: ProgressPaymentFormProps) {
@@ -61,19 +67,69 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
     resolver: zodResolver(formSchema),
     defaultValues: {
       projectId: selectedProjectId || '',
+      hakedisNo: `HK-${new Date().getFullYear()}-`, // Varsayılan değer olarak yıl ekleyelim
       description: '',
       requestedAmount: 0,
       dueDate: null,
       notes: '',
+      files: null
     },
   });
 
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [selectedFiles, setSelectedFiles] = React.useState<File[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const filesArray = Array.from(e.target.files);
+      setSelectedFiles(prev => [...prev, ...filesArray]);
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
 
   const handleSubmit = async (values: z.infer<typeof formSchema>) => {
     setIsSubmitting(true);
     try {
-      const success = await onSubmit(values as ProgressPaymentInput);
+      // FormData oluştur ve dosyaları ekle
+      const formData = new FormData();
+      
+      // Form alanlarını ekle
+      formData.append('projectId', values.projectId);
+      formData.append('hakedisNo', values.hakedisNo);
+      formData.append('description', values.description);
+      formData.append('requestedAmount', values.requestedAmount.toString());
+      
+      if (values.dueDate) {
+        formData.append('dueDate', values.dueDate.toISOString());
+      }
+      
+      if (values.notes) {
+        formData.append('notes', values.notes);
+      }
+      
+      // Dosyaları ekle
+      selectedFiles.forEach((file, index) => {
+        formData.append(`files`, file);
+      });
+      
+      // Veri gönderilmeden önce debug et
+      console.log('Gönderilecek form verileri:', {
+        projectId: values.projectId,
+        hakedisNo: values.hakedisNo,
+        description: values.description,
+        requestedAmount: values.requestedAmount,
+        dueDate: values.dueDate ? values.dueDate.toISOString() : undefined,
+        notes: values.notes || undefined,
+        dosyaSayisi: selectedFiles.length
+      });
+      
+      // API'ye gönder
+      const success = await onSubmit(formData as unknown as ProgressPaymentInput);
+      
       if (!success) {
         form.setError('root', {
           message: 'Hakediş kaydedilirken bir hata oluştu',
@@ -91,7 +147,7 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4" encType="multipart/form-data">
         <FormField
           control={form.control}
           name="projectId"
@@ -116,6 +172,23 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
                   ))}
                 </SelectContent>
               </Select>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="hakedisNo"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Hakediş Numarası</FormLabel>
+              <FormControl>
+                <Input placeholder="Örn: HK-2024-001" {...field} />
+              </FormControl>
+              <FormDescription>
+                Benzersiz bir hakediş numarası girin (örn: HK-2024-001)
+              </FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -214,6 +287,74 @@ export function ProgressPaymentForm({ projects, selectedProjectId, onSubmit, onC
                 />
               </FormControl>
               <FormMessage />
+            </FormItem>
+          )}
+        />
+        
+        {/* Dosya Yükleme Alanı */}
+        <FormField
+          control={form.control}
+          name="files"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Dosyalar (Opsiyonel)</FormLabel>
+              <FormControl>
+                <div className="border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-lg p-4">
+                  <input
+                    type="file"
+                    id="file-upload"
+                    className="hidden"
+                    ref={fileInputRef}
+                    onChange={handleFileChange}
+                    multiple
+                  />
+                  <label 
+                    htmlFor="file-upload" 
+                    className="flex flex-col items-center justify-center cursor-pointer"
+                  >
+                    <UploadCloud className="h-8 w-8 text-gray-500 mb-2" />
+                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                      Dosya yüklemek için tıklayın veya sürükleyin
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, Word, Excel ve resim dosyaları
+                    </span>
+                  </label>
+                </div>
+              </FormControl>
+              <FormMessage />
+              
+              {/* Seçilen Dosyaların Listesi */}
+              {selectedFiles.length > 0 && (
+                <div className="mt-3 space-y-2">
+                  <h4 className="text-sm font-medium">Seçilen Dosyalar:</h4>
+                  <ul className="space-y-2">
+                    {selectedFiles.map((file, index) => (
+                      <li 
+                        key={`${file.name}-${index}`} 
+                        className="flex items-center justify-between bg-gray-50 dark:bg-gray-800 p-2 rounded text-sm"
+                      >
+                        <div className="flex items-center">
+                          <FileIcon className="h-4 w-4 mr-2 text-blue-600" />
+                          <span className="truncate max-w-[200px]">{file.name}</span>
+                          <span className="text-gray-500 ml-2">
+                            ({(file.size / 1024).toFixed(1)} KB)
+                          </span>
+                        </div>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="icon" 
+                          onClick={() => removeFile(index)}
+                          className="h-6 w-6 text-red-500"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </FormItem>
           )}
         />

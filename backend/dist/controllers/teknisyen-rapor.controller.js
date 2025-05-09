@@ -128,7 +128,7 @@ const getTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, funct
 exports.getTeknisyenRaporu = getTeknisyenRaporu;
 // Teknisyen raporu oluştur
 const createTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    var _a;
+    var _a, _b;
     try {
         const { baslik, aciklama, durum, teknisyenId, projeId, siteId, tarih } = req.body;
         console.log('Alınan istek verileri:', req.body);
@@ -137,7 +137,7 @@ const createTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, fu
             return res.status(400).json({ message: 'Başlık alanı zorunludur' });
         }
         if (!teknisyenId) {
-            return res.status(400).json({ message: 'Teknisyen ID alanı zorunludur' });
+            return res.status(400).json({ message: 'Rapor Bilgi Numarası alanı zorunludur' });
         }
         let parsedTarih = new Date();
         if (tarih) {
@@ -153,44 +153,15 @@ const createTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, fu
             console.warn(`Geçersiz durum değeri: ${durum}, varsayılan "TASLAK" kullanılıyor`);
             normalizedDurum = 'TASLAK';
         }
-        // TeknisyenId değerini düzgün formatta olduğundan emin ol
-        const manualTeknisyenId = String(teknisyenId);
-        // Teknisyen mevcut mu diye kontrol et
-        const teknisyen = yield prisma_1.prisma.user.findUnique({
-            where: { id: manualTeknisyenId }
-        });
-        let finalTeknisyenId = manualTeknisyenId;
-        let finalAciklama = aciklama || '';
-        // Teknisyen bulunamadıysa, varsayılan bir teknisyen ID kullan
-        if (!teknisyen) {
-            console.log(`Uyarı: ID'si ${manualTeknisyenId} olan teknisyen veritabanında bulunamadı. Sistem teknisyeni kullanılacak.`);
-            // Sistemde var olan bir admin veya varsayılan teknisyen bul
-            const defaultUser = yield prisma_1.prisma.user.findFirst({
-                where: {
-                    OR: [
-                        { roleId: { in: ["ADMIN", "TEKNISYEN"] } },
-                        { roleId: { equals: "ADMIN" } }
-                    ]
-                }
-            });
-            if (!defaultUser) {
-                return res.status(400).json({
-                    message: `Sistem teknisyeni bulunamadı. Lütfen önce bir teknisyen veya admin hesabı oluşturun.`,
-                    code: 'DEFAULT_USER_NOT_FOUND'
-                });
-            }
-            finalTeknisyenId = defaultUser.id;
-            // Kullanıcının girdiği teknisyen numarasını açıklamaya ekle
-            finalAciklama = `Manuel Teknisyen No: ${manualTeknisyenId}${finalAciklama ? '\n\n' + finalAciklama : ''}`;
-            console.log(`Sistem teknisyeni kullanılıyor. ID: ${finalTeknisyenId}`);
-        }
+        // Sabit bir sistem kullanıcısı ID'si değil, direkt teknisyenId alanını kullan
+        // Açıklama alanını olduğu gibi koru - frontend tarafından gerekli bilgiler ekleniyor
         // Raporu oluştur
         const yeniRapor = yield prisma_1.prisma.teknisyenRapor.create({
             data: {
                 baslik,
-                aciklama: finalAciklama,
+                aciklama: aciklama || '',
                 durum: normalizedDurum,
-                teknisyenId: finalTeknisyenId, // Sistemde var olan teknisyen ID'si
+                teknisyenId: teknisyenId, // Doğrudan kullanıcının girdiği değer
                 projeId: projeId || null,
                 siteId: siteId || null,
                 tarih: parsedTarih
@@ -210,12 +181,50 @@ const createTeknisyenRaporu = (req, res) => __awaiter(void 0, void 0, void 0, fu
                     code: error.code
                 });
             }
-            // Foreign key hatası (P2003) durumunda
+            // Foreign key hatası (P2003) durumunda - veritabanında bulunmayan bir ID kullanıldığında
             if (error.code === 'P2003') {
-                return res.status(400).json({
-                    message: `Veritabanı ilişki hatası! İlgili ID: ${(_a = error.meta) === null || _a === void 0 ? void 0 : _a.target}`,
-                    code: 'FOREIGN_KEY_ERROR'
-                });
+                // Hata detaylarını ayıkla
+                const fieldName = (_a = error.meta) === null || _a === void 0 ? void 0 : _a.field_name;
+                const errorTarget = (_b = error.meta) === null || _b === void 0 ? void 0 : _b.target;
+                console.error(`Foreign key hatası: ${fieldName} alanı için geçersiz değer: ${errorTarget}`);
+                // Kullanıcının girdiği değerleri değişkenlerde saklayalım
+                const originalTeknisyenId = teknisyenId;
+                const originalAciklama = aciklama || '';
+                // Sonra veritabanında var olan bir ID kullanarak tekrar deneyelim
+                try {
+                    // Sisteme kayıtlı bir kullanıcı bul
+                    const defaultUser = yield prisma_1.prisma.user.findFirst();
+                    if (!defaultUser) {
+                        return res.status(500).json({
+                            message: 'Sistem hatası: Varsayılan kullanıcı bulunamadı',
+                            code: 'DEFAULT_USER_NOT_FOUND'
+                        });
+                    }
+                    // Kullanıcının girdiği teknisyenId'yi açıklama alanına ekle
+                    const updatedAciklama = `Rapor Bilgi No: ${originalTeknisyenId}\n\n${originalAciklama}`;
+                    console.log(`Foreign key hatası, varsayılan kullanıcı ile yeniden deneniyor: ${defaultUser.id}`);
+                    console.log(`Kullanıcının girdiği ID açıklamaya eklendi: ${originalTeknisyenId}`);
+                    // Varsayılan kullanıcı ile raporu oluştur
+                    const yeniRapor = yield prisma_1.prisma.teknisyenRapor.create({
+                        data: {
+                            baslik: baslik,
+                            aciklama: updatedAciklama,
+                            durum: normalizedDurum,
+                            teknisyenId: defaultUser.id, // Sistemdeki varolan bir kullanıcı
+                            projeId: projeId || null,
+                            siteId: siteId || null,
+                            tarih: parsedTarih
+                        }
+                    });
+                    return res.status(201).json(yeniRapor);
+                }
+                catch (retryError) {
+                    console.error('Teknisyen raporu oluşturma yeniden deneme hatası:', retryError);
+                    return res.status(500).json({
+                        message: 'Teknisyen raporu oluşturulurken hata oluştu (yeniden deneme)',
+                        code: 'RETRY_FAILED'
+                    });
+                }
             }
         }
         res.status(500).json({ message: errorMessage });

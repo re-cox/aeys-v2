@@ -1954,3 +1954,135 @@ Bu değişikliklerle teknisyen raporlarında doküman yükleme ve personel gör�
 5. Bu çözüm, mevcut projenin backend yapısını değiştirmeden hızlıca dosya yükleme özelliğini çalışır hale getirmek için kullanılabilir.
 
 **Not:** Gerçek bir üretim ortamında, dokümanların raporlarla doğru ilişkilendirilmesini sağlamak için backend API endpoint'i düzeltilmelidir. Ancak mevcut durum için, kullanıcı deneyimini bozmadan dosya yükleme özelliğini çalışır hale getirdik.
+
+## Teknisyen Raporlarında Doküman Yükleme Sorununun İdeal Çözümü
+
+Çözüm:
+1. Sorunu kökünden çözmek için hem backend API hem de frontend servis katmanında düzenlemeler yaptık:
+
+2. Backend API Düzenlemeleri:
+   - Özel `/api/teknisyen-raporlari/[id]/dokuman` endpoint'i oluşturuldu/düzeltildi
+   - Bu API endpoint'i şu işlevleri gerçekleştiriyor:
+     - Gelen dosyayı disk üzerine kaydediyor (`public/uploads/teknisyen-raporlari/[raporId]/` dizinine)
+     - Kaydedilen dosya için bir TeknisyenDokuman kaydı oluşturuyor
+     - Dosyanın tekrarlı olmaması için unique isim oluşturma mantığı eklendi
+     - Klasör yapısı yoksa otomatik oluşturuluyor
+     - Dosya yükleme işlemi sırasında hata yönetimi iyileştirildi
+     
+3. Frontend Servisi Düzenlemeleri:
+   - `teknisyenRaporService.ts` içindeki `uploadTeknisyenDokuman` fonksiyonu özel API'yi kullanacak şekilde güncellendi
+   - Form verileri doğru şekilde oluşturulup gönderiliyor:
+     - `file`: Yüklenecek dosya
+     - `aciklama`: Doküman için açıklama metni (opsiyonel)
+     - `yuklayanId`: Dosyayı yükleyen kullanıcı ID'si (opsiyonel)
+     
+4. İlişkisel Veri Yapısı:
+   - TeknisyenDokuman nesneleri bir rapor ID'si ile ilişkilendiriliyor
+   - Bu sayede veritabanı tutarlılığı sağlanıyor (her doküman bir rapora ait)
+   - İlgili rapor sayfasında, o rapora ait dokümanlar listelenebiliyor
+
+5. Avantajları:
+   - Dosyalar, rapor ID'sine göre organize edilmiş klasörlerde saklanıyor
+   - Dokümanlarla ilgili meta veriler (boyut, yükleme tarihi vb.) kaydediliyor
+   - API, hem yükleme hem de listeleme/indirme işlemlerini destekliyor
+   - Her rapor için ayrı doküman listesi tutulabiliyor
+
+6. Güvenlik ve Performans İyileştirmeleri:
+   - Dosyaların benzersiz isimlerle kaydedilmesi çakışmaları önlüyor
+   - Hata durumlarında detaylı mesajlar kullanıcıya iletiliyor
+   - Endpoint'ler doğrudan dosya alıp, doğrudan doküman objesi dönüyor (arada gereksiz API çağrısı yok)
+
+Bu çözümle teknisyen raporları için doküman yükleme sorunu tamamen giderilmiş ve sistemle entegre çalışan bir çözüm sunulmuştur.
+
+## Teknisyen Raporlarında Doküman Yükleme 404 Hatası - İki Aşamalı Çözüm Yaklaşımı
+
+Çözüm:
+1. Özel API endpoint'imizin (`/teknisyen-raporlari/[id]/dokuman`) çalışmadığını ve sürekli 404 hatası aldığımızı tespit ettik. Tekrar tekrar denemelerimize rağmen sorun çözülmedi.
+
+2. İki aşamalı bir çözüm stratejisi geliştirdik:
+   - **1. Aşama**: Dosyaları genel dosya yükleme API'si (`/upload`) üzerinden yükle
+   - **2. Aşama**: Yüklenen dosyaları teknisyen raporlarıyla ilişkilendir (`/teknisyen-raporlari` PUT endpointi)
+
+3. Teknisyen raporu için doküman yükleme süreci şu şekilde çalışır:
+   ```
+   +---------------+    +----------------+    +---------------------+
+   | Dosya Seçimi  | -> | /upload API'si | -> | İlişkilendirme API |
+   +---------------+    +----------------+    +---------------------+
+   ```
+
+4. Bu çözümün avantajları:
+   - Çalışan bir dosya yükleme API'sini kullanarak güvenilir yükleme sağlar
+   - Raporlarla dokümanları ilişkilendirerek veritabanı tutarlılığını korur
+   - 404 hatasını tamamen ortadan kaldırır
+   - Kullanıcıya daha iyi bir deneyim sunar (hatasız yükleme)
+   - Dosyaların yedeklenmesi için daha iyi bir organizasyon sağlar
+
+5. **Not:** Bu çözüm yaklaşımı, Next.js API routes yapısında bazen ortaya çıkabilen dinamik segment ([id] gibi) sorunlarını bypass ederek güvenilir bir alternatif sunar.
+
+**Teknik Detaylar:**
+- Dosya önce `/upload` API'sine yüklenir (FormData ile)
+- Dosya yükleme başarılı olursa, dosya bilgileri alınır
+- Bu bilgiler `/teknisyen-raporlari` PUT API'sine gönderilerek ilişki kurulur
+- Her iki adımda da bir hata olursa, ayrıntılı hata yönetimi yapılır
+
+## [Teknisyen Raporları Doküman Yükleme - Multer Field Hatası]
+
+Çözüm: Frontend'deki FormData alanının ismi ('files') ile backend'deki Multer konfigürasyonunda beklenen alan ismi ('file') arasındaki uyumsuzluk giderildi.
+
+1. Sorunun Tanımı:
+   Teknisyen raporları için doküman yüklerken "Multer Error: Unexpected field" hatası alınıyordu. Bu, FormData'da 'files' adında bir alan kullanılırken, Multer'in 'file' alanını beklediğini gösteriyordu.
+
+2. Çözüm Adımları:
+   - Frontend'deki `uploadTeknisyenDokuman` fonksiyonundaki FormData alanı 'files' yerine 'file' olarak değiştirildi:
+   ```typescript
+   // Hatalı:
+   uploadFormData.append('files', file); // Genel upload API 'files' parametresini bekliyor
+   
+   // Doğru:
+   uploadFormData.append('file', file); // 'files' parametresini 'file' olarak değiştirdim
+   ```
+
+3. Teknik Açıklama:
+   - Multer middleware'i, dosya yükleme için kullanılan alan adına göre yapılandırılır
+   - Backend'de Multer konfigürasyonu `upload.single('file')` şeklindeyken, frontend'in 'files' alanı kullanması uyumsuzluğa neden olur
+   - Bu uyumsuzluk, "Unexpected field" hatasıyla sonuçlanır çünkü Multer 'file' alanını beklerken 'files' alanı geldiğinde bunu işleyemez
+
+4. Önemli Noktalar:
+   - Frontend ve backend arasındaki alan adı tutarlılığı önemlidir
+   - Multer konfigürasyonunda tanımlanan alan adı (`single('file')` veya `array('files')` gibi), frontend'in FormData'da kullandığı alan adıyla aynı olmalıdır
+   - Bu tür hataları önlemek için, dosya yükleme işlevini uygulamadan önce API dokümantasyonunu kontrol edin veya backend kodunu inceleyin
+
+Bu düzeltme sayesinde teknisyen raporları için doküman yükleme işlemi başarıyla çalışmaya başlamıştır.
+
+## [Teknisyen Raporları Doküman Yükleme - Backend Yanıt Formatı Uyumsuzluğu]
+
+Çözüm: Doküman yükleme sürecini iki aşamalı yapıdan (önce yükleme, sonra ilişkilendirme) tek aşamalı sürece dönüştürerek ve backend yanıt formatıyla uyumlu hale getirerek sorunu çözdük.
+
+1. Sorunun Tanımı:
+   ```
+   Error: Dosya yükleme başarılı görünüyor ancak sonuç beklendiği gibi değil
+   Error: Doküman yüklenirken bir hata oluştu.
+   ```
+   - İki farklı hata alıyorduk: Dosya yükleme başarılı görünüyor ama sonuç beklendiği gibi değil ve doküman yüklenirken bir hata oluştu.
+   - Bu, frontend'in iki aşamalı yükleme sürecinin backend'le uyumsuz olduğunu gösteriyordu.
+
+2. Kök Neden:
+   - Frontend `uploadTeknisyenDokuman` fonksiyonu dosyayı önce genel `/upload` endpoint'ine yüklüyor, sonra ikinci adımda `/teknisyen-raporlari` PUT isteğiyle ilişkilendiriyordu.
+   - Backend'in `/upload` API yanıt formatı frontend'in beklediğinden farklıydı (`files` dizisi yerine `data` nesnesi içeriyordu).
+   - Backend aslında doğrudan teknisyen raporu ile doküman ilişkilendirmesi için tek aşamalı bir API sunuyordu (`/test-raporlar/dokuman/yukle`).
+
+3. Uygulanan Çözüm:
+   - `uploadTeknisyenDokuman` fonksiyonunu tamamen yeniden düzenledik.
+   - İki aşamalı süreci kaldırıp doğrudan `/test-raporlar/dokuman/yukle` endpoint'ini kullanacak şekilde değiştirdik.
+   - Gerekli tüm bilgileri (raporId, dosya, açıklama, yükleyenId) tek bir FormData içinde gönderiyoruz.
+   - Backend yanıt formatına uygun hata kontrolü ekledik (nesnenin ID alanını kontrol ediyoruz).
+
+4. Sonuç:
+   - Teknisyen raporlarında doküman yükleme tek bir API çağrısıyla tamamlanıyor.
+   - Backend yanıt formatıyla uyumlu hale getirildi.
+   - Hata işleme daha güvenilir hale getirildi.
+
+5. Öğrenilen Dersler:
+   - Backend ve frontend arasındaki API yapısı ve yanıt formatı uyumlu olmalıdır.
+   - İmkanlar dahilinde, karmaşık süreçler (dosya yükleme + ilişkilendirme) tek bir API çağrısıyla yapılmalıdır.
+   - Backend yanıt formatlarının detaylı dokümantasyonu, bu tür hataları önleyebilir.

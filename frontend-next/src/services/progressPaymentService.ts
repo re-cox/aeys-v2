@@ -77,18 +77,59 @@ export async function getProgressPaymentById(id: string): Promise<ProgressPaymen
  * @param paymentData Hakediş verileri
  * @returns Oluşturulan hakediş
  */
-export async function createProgressPayment(paymentData: ProgressPaymentInput): Promise<ProgressPayment> {
+export async function createProgressPayment(paymentData: ProgressPaymentInput | FormData): Promise<ProgressPayment> {
   try {
-    const response = await fetch('http://localhost:5001/api/progress-payments', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(paymentData),
-    });
+    // Auth token al (varsa)
+    const authToken = localStorage.getItem('token');
+    const headers: HeadersInit = {};
+    
+    if (authToken) {
+      headers['Authorization'] = `Bearer ${authToken}`;
+    }
+    
+    // FormData mı yoksa normal JSON mu kontrol et
+    let requestOptions: RequestInit = {};
+    
+    if (paymentData instanceof FormData) {
+      console.log('FormData ile istek gönderiliyor...');
+      // Formdata içeriğini debug amaçlı loglama
+      console.log("FormData içeriği:");
+      for (const pair of (paymentData as FormData).entries()) {
+        console.log(pair[0], pair[1]);
+      }
+      
+      // FormData ile gönderiyoruz, Content-Type başlığını eklememeliyiz
+      // Tarayıcı otomatik olarak boundary ekleyecek
+      requestOptions = {
+        method: 'POST',
+        headers,
+        body: paymentData,
+      };
+    } else {
+      console.log('JSON ile istek gönderiliyor...');
+      // JSON verisi gönderiyoruz
+      headers['Content-Type'] = 'application/json';
+      requestOptions = {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(paymentData),
+      };
+    }
+    
+    const response = await fetch('http://localhost:5001/api/progress-payments', requestOptions);
     
     if (!response.ok) {
-      throw new Error('Hakediş oluşturulamadı');
+      // Hata mesajını detaylı göster
+      let errorData;
+      try {
+        errorData = await response.json();
+      } catch (e) {
+        // JSON olarak parse edilemezse, text olarak dene
+        errorData = { message: await response.text() };
+      }
+      
+      console.error('API Yanıtı:', response.status, errorData);
+      throw new Error(errorData?.message || 'Hakediş oluşturulamadı');
     }
     
     const data = await response.json();
@@ -183,7 +224,7 @@ export async function deleteProgressPayment(id: string): Promise<boolean> {
  */
 export async function getProjectFinancialSummary(projectId: string): Promise<ProjectFinancialSummary> {
   try {
-    const response = await fetch(`http://localhost:5001/api/projects/${projectId}/financial-summary`);
+    const response = await fetch(`http://localhost:5001/api/progress-payments/projects/${projectId}/financial-summary`);
     
     if (!response.ok) {
       throw new Error('Proje finansal özeti alınamadı');
