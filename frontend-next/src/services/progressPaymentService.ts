@@ -7,7 +7,8 @@ import {
   ProgressPayment, 
   ProgressPaymentInput, 
   ProgressPaymentStatusUpdate,
-  ProjectFinancialSummary
+  ProjectFinancialSummary,
+  ProgressPaymentDocument
 } from '@/types/progressPayment';
 
 /**
@@ -175,6 +176,16 @@ export async function updateProgressPayment(id: string, paymentData: Partial<Pro
  */
 export async function updateProgressPaymentStatus(statusData: ProgressPaymentStatusUpdate): Promise<ProgressPayment> {
   try {
+    console.log('Hakediş durumu güncelleniyor:', statusData);
+    
+    if (!statusData.id) {
+      throw new Error('Hakediş ID (id) zorunludur');
+    }
+    
+    if (!statusData.status) {
+      throw new Error('Durum (status) bilgisi zorunludur');
+    }
+    
     const response = await fetch(`http://localhost:5001/api/progress-payments/${statusData.id}/status`, {
       method: 'PUT',
       headers: {
@@ -183,13 +194,30 @@ export async function updateProgressPaymentStatus(statusData: ProgressPaymentSta
       body: JSON.stringify(statusData),
     });
     
+    // HTTP yanıtı detaylı log
+    console.log('API yanıt durumu:', response.status, response.statusText);
+    
     if (!response.ok) {
-      throw new Error('Hakediş durumu güncellenemedi');
+      // Hata mesajını detaylı göster
+      let errorData;
+      
+      try {
+        errorData = await response.json();
+        console.error('API hata yanıtı (JSON):', errorData);
+      } catch (e) {
+        // JSON olarak parse edilemezse, text olarak dene
+        const responseText = await response.text();
+        console.error('API hata yanıtı (Text):', responseText);
+        errorData = { message: responseText || 'Hakediş durumu güncellenemedi' };
+      }
+      
+      throw new Error(errorData?.message || 'Hakediş durumu güncellenemedi');
     }
     
     const data = await response.json();
+    console.log('API başarılı yanıt:', data);
     return data.data;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Hakediş durumu güncellenirken hata:', error);
     throw error;
   }
@@ -250,7 +278,6 @@ export function translateProgressPaymentStatus(status: string): string {
     case 'PENDING': return 'Onay Bekliyor';
     case 'APPROVED': return 'Onaylandı';
     case 'PAID': return 'Ödendi';
-    case 'PARTIALLY_PAID': return 'Kısmi Ödendi';
     case 'REJECTED': return 'Reddedildi';
     default: return status;
   }
@@ -268,8 +295,47 @@ export function getStatusColorClass(status: string): string {
     case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300';
     case 'APPROVED': return 'bg-green-100 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300';
     case 'PAID': return 'bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-900/20 dark:text-emerald-300';
-    case 'PARTIALLY_PAID': return 'bg-cyan-100 text-cyan-800 border-cyan-200 dark:bg-cyan-900/20 dark:text-cyan-300';
     case 'REJECTED': return 'bg-red-100 text-red-800 border-red-200 dark:bg-red-900/20 dark:text-red-300';
     default: return 'bg-gray-100 text-gray-800 border-gray-200 dark:bg-gray-800 dark:text-gray-300';
   }
+}
+
+/**
+ * Hakediş dökümanı siler
+ * @param progressPaymentId Hakediş ID'si
+ * @param documentId Döküman ID'si
+ * @returns İşlem başarılı mı
+ */
+export async function deleteProgressPaymentDocument(progressPaymentId: string, documentId: string): Promise<boolean> {
+  try {
+    const response = await fetch(`http://localhost:5001/api/progress-payments/${progressPaymentId}/documents/${documentId}`, {
+      method: 'DELETE',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Döküman silinemedi');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Döküman silinirken hata:', error);
+    throw error;
+  }
+}
+
+/**
+ * Dökümanın tam URL'sini oluşturur
+ * @param fileUrl Döküman URL'si (göreceli)
+ * @returns Tam erişim URL'si
+ */
+export function getProgressPaymentDocumentUrl(fileUrl: string): string {
+  if (!fileUrl) return '';
+  
+  // URL zaten tam ise (http veya https ile başlıyorsa) olduğu gibi döndür
+  if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://')) {
+    return fileUrl;
+  }
+  
+  // Göreceli URL'i tam URL'e dönüştür
+  return `http://localhost:5001${fileUrl}`;
 }

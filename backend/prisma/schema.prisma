@@ -30,6 +30,7 @@ model User {
   tasks                 Task[]
   teknisyenDokumanlari  TeknisyenDokuman[]
   teknisyenRaporlari    TeknisyenRapor[]
+  yukledigiHakedisler   HakedisDocument[]  @relation("YukleyenKullanici")
   role                  Role               @relation(fields: [roleId], references: [id])
   assignedTasks         Task[]             @relation("TaskAssignee")
 }
@@ -446,34 +447,94 @@ model ProposalItem {
 }
 
 model Hakedis {
-  id              String       @id @default(uuid())
-  hakedisNo       String       @unique
+  id              String            @id @default(uuid())
+  hakedisNo       String            @unique
   projeId         String
   aciklama        String?
-  hakedisTarihi   DateTime     @default(now())
+  hakedisTarihi   DateTime          @default(now())
   baslangicTarihi DateTime
   bitisTarihi     DateTime
   tutar           Float
-  kdvOrani        Float        @default(0.20)
+  kdvOrani        Float             @default(0.20)
   kdvTutar        Float
   toplamTutar     Float
-  paraBirimi      String       @default("TRY")
-  durum           HakedisDurum @default(TASLAK)
+  paraBirimi      String            @default("TRY")
+  durum           HakedisDurum      @default(TASLAK)
   olusturanId     String
   onaylayanId     String?
   onayTarihi      DateTime?
   odemeTarihi     DateTime?
   odemeKanali     String?
   odemeReferansNo String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  olusturan       User         @relation("OlusturanHakedisler", fields: [olusturanId], references: [id])
-  onaylayan       User?        @relation("OnaylayanHakedisler", fields: [onaylayanId], references: [id])
-  proje           Project      @relation(fields: [projeId], references: [id])
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  olusturan       User              @relation("OlusturanHakedisler", fields: [olusturanId], references: [id])
+  onaylayan       User?             @relation("OnaylayanHakedisler", fields: [onaylayanId], references: [id])
+  proje           Project           @relation(fields: [projeId], references: [id])
+  documents       HakedisDocument[]
 
   @@index([projeId])
   @@index([olusturanId])
   @@index([onaylayanId])
+}
+
+model HakedisDocument {
+  id           String   @id @default(uuid())
+  hakedisId    String   // Hakediş ID'si
+  fileName     String   // Dosyanın görünen adı
+  originalName String?  // Orijinal dosya adı
+  fileUrl      String   // Dosyanın erişim URL'i
+  fileType     String   // Dosya MIME tipi
+  fileSize     Int      // Dosya boyutu (byte)
+  uploadDate   DateTime @default(now()) // Yükleme tarihi
+  uploadedById String?  // Yükleyen kullanıcı ID'si
+  notes        String?  // İsteğe bağlı notlar
+  hakedis      Hakedis  @relation(fields: [hakedisId], references: [id], onDelete: Cascade) // Hakediş ilişkisi
+  uploadedBy   User?    @relation("YukleyenKullanici", fields: [uploadedById], references: [id]) // Yükleyen kullanıcı ilişkisi
+
+  @@index([hakedisId])
+  @@index([uploadedById])
+}
+
+model ProgressPayment {
+  id           String   @id @default(uuid())
+  paymentNumber Int
+  description  String
+  requestedAmount Float
+  approvedAmount Float?
+  paidAmount   Float?
+  status       String   // DRAFT, SUBMITTED, PENDING, APPROVED, PAID, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  dueDate      DateTime?
+  paymentDate  DateTime?
+  notes        String?
+  
+  // İlişkiler
+  project      Project  @relation(fields: [projectId], references: [id])
+  projectId    String
+  createdBy    User?    @relation("ProgressPaymentCreatedBy", fields: [createdById], references: [id])
+  createdById  String?
+  approvedBy   User?    @relation("ProgressPaymentApprovedBy", fields: [approvedById], references: [id])
+  approvedById String?
+  
+  // Belgeler ilişkisi
+  documents    ProgressPaymentDocument[]
+
+  @@map("progress_payments")
+}
+
+model ProgressPaymentDocument {
+  id                String         @id @default(uuid())
+  fileName          String
+  fileUrl           String
+  fileType          String
+  fileSize          Int
+  uploadDate        DateTime       @default(now())
+  progressPayment   ProgressPayment @relation(fields: [progressPaymentId], references: [id], onDelete: Cascade)
+  progressPaymentId String
+
+  @@map("progress_payment_documents")
 }
 
 enum ProjectStatus {
@@ -542,9 +603,11 @@ enum ProposalStatus {
 
 enum HakedisDurum {
   TASLAK
+  GONDERILDI
   ONAY_BEKLIYOR
   ONAYLANDI
   ODENDI
+  KISMI_ODENDI
   REDDEDILDI
   IPTAL_EDILDI
 }

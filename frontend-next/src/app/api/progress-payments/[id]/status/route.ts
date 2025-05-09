@@ -46,13 +46,13 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
     };
     
     // Durum bazlı alan güncellemeleri
-    if (['APPROVED', 'PARTIALLY_PAID', 'PAID'].includes(body.status)) {
+    if (['APPROVED', 'PAID'].includes(body.status)) {
       if (body.approvedAmount !== undefined) {
         updateData.approvedAmount = body.approvedAmount;
       }
     }
     
-    if (['PARTIALLY_PAID', 'PAID'].includes(body.status)) {
+    if (['PAID'].includes(body.status)) {
       if (body.paidAmount !== undefined) {
         updateData.paidAmount = body.paidAmount;
       }

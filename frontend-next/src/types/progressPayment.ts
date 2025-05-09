@@ -9,7 +9,6 @@ export type ProgressPaymentStatus =
   | 'PENDING'     // Onay Bekliyor
   | 'APPROVED'    // Onaylandı
   | 'PAID'        // Ödendi
-  | 'PARTIALLY_PAID' // Kısmi Ödendi
   | 'REJECTED';   // Reddedildi
 
 // Hakediş belgesi tipi

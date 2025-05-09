@@ -83,6 +83,24 @@ app.use('/api/attendances', attendanceRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/progress-payments', hakedisRoutes); // Yeni hakediş route'larını kullan
 
+// Routes
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
+// Debug/Test endpoint
+app.get('/api/debug/test', (req, res) => {
+  res.status(200).json({ 
+    message: 'API Sunucusu Aktif', 
+    date: new Date().toISOString(), 
+    routes: [
+      '/api/progress-payments/test',
+      '/api/progress-payments/:id/status',
+      '/api/health'
+    ]
+  });
+});
+
 // 404 - Bulunamayan Rotalar
 app.use((req, res) => {
   res.status(404).json({

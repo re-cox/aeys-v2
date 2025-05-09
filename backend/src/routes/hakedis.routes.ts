@@ -28,6 +28,9 @@ router.delete('/:id', progressPaymentController.deleteProgressPayment);
 // PUT /api/progress-payments/:id/status -> Hakediş durumunu günceller
 router.put('/:id/status', progressPaymentController.updateProgressPaymentStatus);
 
+// DELETE /api/progress-payments/:id/documents/:documentId -> Hakediş dökümanını siler
+router.delete('/:id/documents/:documentId', progressPaymentController.deleteProgressPaymentDocument);
+
 // GET /api/progress-payments/project/:projectId/summary -> Proje finansal özeti
 router.get('/project/:projectId/summary', progressPaymentController.getProjectFinancialSummary);
 

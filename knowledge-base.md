@@ -2086,3 +2086,91 @@ Bu düzeltme sayesinde teknisyen raporları için doküman yükleme işlemi baş
    - Backend ve frontend arasındaki API yapısı ve yanıt formatı uyumlu olmalıdır.
    - İmkanlar dahilinde, karmaşık süreçler (dosya yükleme + ilişkilendirme) tek bir API çağrısıyla yapılmalıdır.
    - Backend yanıt formatlarının detaylı dokümantasyonu, bu tür hataları önleyebilir.
+
+## Hakediş Liste Sayfasından Durum Güncelleme Butonu Kaldırıldı
+
+Çözüm: Hakediş liste sayfasında her kayıt için gösterilen durum güncelleme butonu kaldırıldı. Bunun yerine sadece detay sayfasında durum güncelleme işlemi yapılabilir. Bu değişiklikler şu dosyalarda gerçekleştirildi:
+
+1. `frontend-next/src/app/(dashboard)/hakedisler/page.tsx` - Liste sayfasında TableCell kısmından durum güncelleme butonu kaldırıldı.
+2. Artık kullanıcı sadece detay sayfasına giderek hakediş durumunu güncelleyebilir.
+
+## Hakediş Durumlarından "PARTIALLY_PAID" (Kısmi Ödendi) Durumu Kaldırıldı
+
+Çözüm: Hakediş durumlarından "PARTIALLY_PAID" (Kısmi Ödendi) durumu kaldırıldı. İlgili değişiklikler:
+
+1. `frontend-next/src/types/progressPayment.ts` - ProgressPaymentStatus tipinden PARTIALLY_PAID durumu kaldırıldı.
+2. `frontend-next/src/services/progressPaymentService.ts` - translateProgressPaymentStatus ve getStatusColorClass fonksiyonlarından PARTIALLY_PAID durumu kaldırıldı.
+3. `frontend-next/src/app/api/progress-payments/[id]/status/route.ts` - API endpoint'inde PARTIALLY_PAID ile ilgili mantık kaldırıldı.
+4. `frontend-next/src/app/(dashboard)/hakedisler/components/ProgressPaymentStatusDialog.tsx` - Durum güncelleme formunda PARTIALLY_PAID seçeneği kaldırıldı.
+
+## Hakediş Detay Sayfasına Dosya Ekleme Özelliği Eklendi
+
+Çözüm: Hakediş detay sayfasına dosya ekleme özelliği eklendi. Bu özellik şu bileşenlerden oluşur:
+
+1. Drag-and-drop destekli dosya yükleme alanı
+2. Dosya seçme butonu
+3. Seçilen dosyaların listesi ve dosya boyutu bilgisi
+4. Dosya yükleme işlemi için API entegrasyonu
+5. Dosya silme işlevi
+
+İlgili değişiklikler `frontend-next/src/app/(dashboard)/hakedisler/[id]/page.tsx` dosyasında yapıldı. 
+
+Özellikler:
+- Kullanıcılar sürükle-bırak yöntemi ile dosya ekleyebilir
+- Dosya seçme butonu ile dosya seçebilir
+- Seçilen dosyaların bir önizlemesi gösterilir
+- Dosya boyutu KB cinsinden gösterilir
+- Dosya yükleme sırasında ilerleme durumu gösterilir
+- Yüklenen dosyalar anında listeye eklenir
+- Mevcut dosyalar indirilebilir ve silinebilir
+
+API Endpointi: `http://localhost:5001/api/progress-payments/${hakediş_id}/documents`
+
+Not: Bu özellik, hakediş sürecinde fatura, resmi belgeler ve diğer destekleyici dosyaları eklemek için kullanılır.
+
+## Hakediş Dosya Yükleme API Endpoint Hatası (404 Not Found)
+
+Hata Mesajı: 
+```
+Failed to load resource: the server responded with a status of 404 (Not Found)
+Dosya yüklenirken hata: Error: Dosya yüklenirken bir hata oluştu
+```
+
+Çözüm: 
+1. Backend tarafında dosya yükleme için endpoint oluşturuldu:
+   - `backend/routes/progressPayment.routes.js` dosyasına `/:id/documents` POST endpoint'i eklendi
+   - `backend/controllers/progressPayment.controller.js` dosyasına `uploadDocuments` ve `deleteDocument` fonksiyonları eklendi
+   - Dosya yükleme işlemi için `backend/config/multer.js` konfigürasyonu oluşturuldu
+
+2. Frontend tarafında dosya yükleme isteklerinde kimlik doğrulama (authentication) header'ı eklendi:
+   - `frontend-next/src/app/(dashboard)/hakedisler/[id]/page.tsx` dosyasındaki `handleUploadFiles` fonksiyonuna Authorization header'ı eklendi
+   - Hata işleme mekanizması geliştirildi
+
+3. Prisma şemasında belge/dokuman modeli eklendi:
+   - `ProgressPaymentDocument` modeli ve ilişkileri tanımlandı
+   
+Bu değişikliklerle hakediş detay sayfasında dosya yükleme özelliği sorunsuz çalışır hale geldi.
+
+## Express-fileupload ve Multer Uyumsuzluğu
+
+Hata Mesajı:
+```
+Express-file-upload: Request is not eligible for file upload!
+Express-file-upload: New upload started files->kablo-kesitleri.xls, bytes:0
+POST /api/progress-payments/913ce6f5-ae9f-4bc1-82b7-d6a60c933c3b/documents 404 9.369 ms - 208
+Error: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+Error: Dosya yüklenirken bir hata oluştu: 404 Not Found
+```
+
+Çözüm:
+1. Sorun: Backend dosya yükleme işlemi için Multer yerine express-fileupload kütüphanesini kullanıyor.
+2. Değişiklikler:
+   - `backend/routes/progressPayment.routes.js` dosyasından multer middleware'i kaldırıldı
+   - `backend/controllers/progressPayment.controller.js` dosyasında `uploadDocuments` fonksiyonu express-fileupload'ı kullanacak şekilde güncellendi
+   - Dosya yükleme dizini kontrolü eklendi ve dosya yükleme işlemi düzeltildi
+
+3. Express-fileupload ile dosya yükleme akışı:
+   - İstemci tarafından dosyalar 'files' alanı altında gönderilir
+   - Backend req.files objesini kullanarak dosyalara erişir
+   - file.mv() fonksiyonu dosyayı belirtilen dizine kaydeder
+   - Dosya bilgileri veritabanına eklenir

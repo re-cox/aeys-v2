@@ -423,17 +423,6 @@ export default function HakedislerPage() {
                         <div className="flex justify-end gap-1">
                           <Button 
                             variant="ghost" 
-                            size="icon" 
-                            onClick={() => {
-                              setSelectedPayment(payment);
-                              setIsStatusDialogOpen(true);
-                            }}
-                            title="Durum Güncelle"
-                          >
-                            <FileCheck className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
                             size="icon"
                             title="Detay Görüntüle"
                             onClick={() => handleViewProgressPaymentDetail(payment.id)}
