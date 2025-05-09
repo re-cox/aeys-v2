@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const logger = require('morgan');
+const fileUpload = require('express-fileupload');
 
 // Route'ları içe aktar
 const userRoutes = require('./routes/user.routes');
@@ -16,6 +17,18 @@ app.use(cors());
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+// Express-fileupload middleware'i
+app.use(fileUpload({
+  createParentPath: true, // Parent dizinleri otomatik oluştur
+  limits: { 
+    fileSize: 10 * 1024 * 1024 // 10MB dosya boyutu limiti
+  },
+  abortOnLimit: true, // Limit aşılırsa işlemi durdur
+  useTempFiles: true, // Geçici dosyaları kullan
+  tempFileDir: path.join(__dirname, '..', 'tmp'), // Geçici dosyalar için dizin
+  debug: true // Hata ayıklama modunu aktif et
+}));
 
 // Uploads klasörünü statik olarak sunma
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));

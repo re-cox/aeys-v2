@@ -2151,6 +2151,38 @@ Dosya yüklenirken hata: Error: Dosya yüklenirken bir hata oluştu
    
 Bu değişikliklerle hakediş detay sayfasında dosya yükleme özelliği sorunsuz çalışır hale geldi.
 
+## Express-fileupload Yapılandırma Eksikliği
+
+Hata Mesajı:
+```
+Express-file-upload: Request is not eligible for file upload!
+Error: Unexpected token '<', "<!DOCTYPE "... is not valid JSON
+```
+
+Çözüm: 
+1. Server.js dosyasına express-fileupload konfigürasyonu eklendi:
+```javascript
+// Express-fileupload middleware'i ekleyin
+const fileUpload = require('express-fileupload');
+
+app.use(fileUpload({
+  createParentPath: true, // Parent dizinleri otomatik oluştur
+  limits: { 
+    fileSize: 10 * 1024 * 1024 // 10MB dosya boyutu limiti
+  },
+  abortOnLimit: true, // Limit aşılırsa işlemi durdur
+  useTempFiles: true, // Geçici dosyaları kullan
+  tempFileDir: path.join(__dirname, '..', 'tmp'), // Geçici dosyalar için dizin
+  debug: true // Hata ayıklama modunu aktif et
+}));
+```
+
+2. Paket yüklü değilse `npm install express-fileupload` komutu ile paket yüklendi
+
+3. Backend sunucusu yeniden başlatıldı
+
+Bu değişikliklerle express-fileupload kütüphanesi doğru şekilde yapılandırıldı ve dosya yükleme işlemi çalışır hale geldi.
+
 ## Express-fileupload ve Multer Uyumsuzluğu
 
 Hata Mesajı:
