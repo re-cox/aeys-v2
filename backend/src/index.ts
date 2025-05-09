@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
+import fileUpload from 'express-fileupload';
 import { env } from './config/env';
 import { prisma } from './lib/prisma';
 
@@ -39,6 +40,15 @@ app.use(cors({
 app.use(helmet());
 app.use(morgan('dev'));
 app.use(express.json());
+
+// Express fileupload middleware'ini ekle
+app.use(fileUpload({
+  createParentPath: true,
+  limits: { 
+    fileSize: 50 * 1024 * 1024 // 50MB limit
+  },
+  debug: true // Geliştirme ortamında debug modu açık
+}));
 
 // Statik dosyalar için uploads klasörünü ekle
 app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
